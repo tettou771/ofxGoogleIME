@@ -3,8 +3,8 @@
 ofxGoogleIME::ofxGoogleIME() {
 	ofSetEscapeQuitsApp(false);
 	makeDictionary();
-    movingY = 0;
-    cursorPos = cursorPosBeforeHenkan = 0;
+    state = Eisu;
+    clear();
 }
 
 ofxGoogleIME::~ofxGoogleIME() {
@@ -25,7 +25,8 @@ void ofxGoogleIME::disable() {
 void ofxGoogleIME::clear() {
 	beforeKana = U"";
 	beforeHenkan = U"";
-	afterHenkan = U"";
+    line.clear();
+    line.push_back(U"");
 	
 	// 候補リストを空にする
 	for (auto c : candidate) {
@@ -35,10 +36,22 @@ void ofxGoogleIME::clear() {
 	candidateSelected.clear();
 	candidateFocus = 0;
 	candidateKana.clear();
+    movingY = 0;
+    cursorBlinkOffsetTime = ofGetElapsedTimef();
+    cursorLine = cursorPos = cursorPosBeforeHenkan = 0;
+    
+    switch (state) {
+    case KanaNyuryoku:
+    case KanaHenkan:
+    state = Kana;
+        break;
+    default:
+        break;
+    }
 }
 
 void ofxGoogleIME::keyPressed(ofKeyEventArgs & key) {
-	switch (key.key) {
+    switch (key.key) {
 		// escで変換前文字をクリア
 	case OF_KEY_ESC:
 		beforeHenkan = U"";
@@ -61,8 +74,8 @@ void ofxGoogleIME::keyPressed(ofKeyEventArgs & key) {
             // もし文字列が空になっていたら、Kanaに戻す
             if (beforeHenkan.length() == 0) state = Kana;
         }
-        else if (afterHenkan.length() > 0) {
-            backspaceCharacter(afterHenkan, cursorPos);
+        else if (line[cursorLine].length() > 0) {
+            backspaceCharacter(line[cursorLine], cursorPos, true);
         }
 		break;
         
@@ -82,8 +95,8 @@ void ofxGoogleIME::keyPressed(ofKeyEventArgs & key) {
             // もし文字列が空になっていたら、Kanaに戻す
             if (beforeHenkan.length() == 0) state = Kana;
          }
-        else if (afterHenkan.length() > 0) {
-            deleteCharacter(afterHenkan, cursorPos);
+        else if (line[cursorLine].length() > 0) {
+            deleteCharacter(line[cursorLine], cursorPos, true);
         }
         break;
 
@@ -124,14 +137,30 @@ void ofxGoogleIME::keyPressed(ofKeyEventArgs & key) {
         break;
 		// 上下カーソルキー
 	case OF_KEY_UP:
-		if (state == KanaHenkan) {
-			candidateToggle(-1);
-		}
+        switch (state) {
+        case KanaHenkan:
+            candidateToggle(-1);
+            break;
+        case KanaNyuryoku:
+            henkan();
+            break;
+        default:
+            lineChange(-1);
+            break;
+        }
 		break;
 	case OF_KEY_DOWN:
-		if (state == KanaHenkan) {
-			candidateToggle(1);
-		}
+        switch (state) {
+        case KanaHenkan:
+            candidateToggle(1);
+            break;
+        case KanaNyuryoku:
+            henkan();
+            break;
+        default:
+            lineChange(1);
+            break;
+        }
 		break;
 
 		// 左右カーソルキー
@@ -170,8 +199,8 @@ void ofxGoogleIME::keyPressed(ofKeyEventArgs & key) {
         case Eisu:
         case Kana:
             cursorPos++;
-            if (cursorPos > afterHenkan.length()) {
-                cursorPos = (int)afterHenkan.length();
+            if (cursorPos > line[cursorLine].length()) {
+                cursorPos = (int)line[cursorLine].length();
             }
             break;
             // 変換前のひらがな入力中は、その中で移動
@@ -187,10 +216,10 @@ void ofxGoogleIME::keyPressed(ofKeyEventArgs & key) {
 		// 決定キーで実行、キーをクリアする
 	case OF_KEY_RETURN:
 		switch (state) {
-                // 変換する文字列がなければ、改行を追加
+                // 変換する文字列がなければ、改行(新しい行)を追加
 		case Eisu:
 		case Kana:
-			//afterHenkan += U"\n";
+            newLine();
 			break;
 
                 // 何らかの変換前文字列があれば
@@ -242,21 +271,36 @@ void ofxGoogleIME::keyPressed(ofKeyEventArgs & key) {
 
 	// 直前に押したキーを保存
 	pastPressedKey = key.key;
+    
+    // カーソルの点滅を初期化
+    cursorBlinkOffsetTime = ofGetElapsedTimef();
 }
 
 void ofxGoogleIME::keyReleased(ofKeyEventArgs & key) {
 }
 
 string ofxGoogleIME::getAll() {
-	return UTF32toUTF8(afterHenkan + beforeHenkan + beforeKana);
+    string all = "";
+    for (auto &a : line) {
+        all += UTF32toUTF8(a);
+        if (a != line.back()) {
+            all += '\n';
+        }
+    }
+	return all;
 }
 
-string ofxGoogleIME::getAfterHenkan() {
-	return UTF32toUTF8(afterHenkan);
+string ofxGoogleIME::getAfterHenkan(int l) {
+    if (0 <= l && l < line.size()) {
+        return UTF32toUTF8(line[l]);
+    }
+    else {
+        return "";
+    }
 }
 
-string ofxGoogleIME::getAfterHenkanSubstr(int begin, int end) {
-    return UTF32toUTF8(afterHenkan.substr(begin, end));
+string ofxGoogleIME::getAfterHenkanSubstr(int l, int begin, int end) {
+    return UTF32toUTF8(line[l].substr(begin, end));
 }
 
 string ofxGoogleIME::getBeforeKana() {
@@ -290,141 +334,157 @@ void ofxGoogleIME::draw(float x, float y) {
 		return;
 	}
 
-	float fontSize = font.getSize();
+    // 変換するときのエフェクト
     movingY *= 0.7;
 
-	// それぞれの文字列
-	string after = getAfterHenkan();
-	string before = getBeforeHenkan();
-	float afterW = font.getStringBoundingBox(after, 0, 0).width;
-	vector<float> candidateW;
-	float candidateTotalW = 0;
-	for (int i = 0; i < candidate.size(); ++i) {
-		auto utf8String = UTF32toUTF8(candidate[i][candidateSelected[i]]);
-		candidateW.push_back(font.getStringBoundingBox(utf8String, 0, 0).width);
-		candidateTotalW += candidateW.back();
-	}
-	float beforeW = font.getStringBoundingBox(before, 0, 0).width;
-	float margin = font.getSize() * 0.1;
+    float fontSize = font.getSize();
     
-    // 入力カーソルを描画する関数
-    auto drawCursor = [=](float x, float y) {
-        if (fmod(ofGetElapsedTimef(), 0.8) < 0.4) {
-            ofSetLineWidth(2);
-            ofDrawLine(x + 1, y, x + 1, y - fontSize * 1.2);
-        }
-    };
+    // 行の高さ
+    float lineHeight = font.getLineHeight();
     
-	ofPushMatrix();
-	switch (state) {
-	case Kana:
-	case Eisu:
-    case KanaNyuryoku:
-		ofTranslate(x, y);
-
-        if (beforeKana.length() == 0 && beforeHenkan.length() == 0) {
-            // 確定後
-            font.drawString(getAfterHenkan(), 0, 0);
-            
-            // cursor
-            drawCursor(font.stringWidth(getAfterHenkanSubstr(0, cursorPos)), 0);
+    ofPushMatrix();
+    ofTranslate(x, y);
+    for (int i=0; i<line.size(); ++i) {
+        // すでに入力されている行
+        if (i != cursorLine) {
+            font.drawString(UTF32toUTF8(line[i]), 0, 0);
         }
+        // 現在入力中の行
         else {
-            // 確定後の部分のカーソルの前
-            font.drawString(getAfterHenkanSubstr(0, cursorPos), 0, 0);
+            // それぞれの文字列
+            string after = getAfterHenkan(cursorLine);
+            string before = getBeforeHenkan();
+            float afterW = font.getStringBoundingBox(after, 0, 0).width;
+            vector<float> candidateW;
+            float candidateTotalW = 0;
+            for (int i = 0; i < candidate.size(); ++i) {
+                auto utf8String = UTF32toUTF8(candidate[i][candidateSelected[i]]);
+                candidateW.push_back(font.getStringBoundingBox(utf8String, 0, 0).width);
+                candidateTotalW += candidateW.back();
+            }
+            float beforeW = font.getStringBoundingBox(before, 0, 0).width;
+            float margin = font.getSize() * 0.1;
             
-            // 描画位置を移動
-            ofTranslate(font.stringWidth(getAfterHenkanSubstr(0, cursorPos)) + margin, 0);
+            // 入力カーソルを描画する関数
+            auto drawCursor = [=](float x, float y) {
+                if (fmod(ofGetElapsedTimef() - cursorBlinkOffsetTime, 0.8) < 0.4) {
+                    ofSetLineWidth(2);
+                    ofDrawLine(x + 1, y, x + 1, y - fontSize * 1.2);
+                }
+            };
             
-            if (beforeKana.length() == 0) {
-                // 変換前のかな
-                font.drawString(getBeforeHenkan(), 0, 0);
+            ofPushMatrix();
+            switch (state) {
+            case Kana:
+            case Eisu:
+            case KanaNyuryoku:
+                if (beforeKana.length() == 0 && beforeHenkan.length() == 0) {
+                    // 確定後
+                    font.drawString(getAfterHenkan(cursorLine), 0, 0);
+                    
+                    // cursor
+                    drawCursor(font.stringWidth(getAfterHenkanSubstr(cursorLine,0, cursorPos)), 0);
+                }
+                else {
+                    // 確定後の部分のカーソルの前
+                    font.drawString(getAfterHenkanSubstr(cursorLine,0, cursorPos), 0, 0);
+                    
+                    // 描画位置を移動
+                    ofTranslate(font.stringWidth(getAfterHenkanSubstr(cursorLine,0, cursorPos)) + margin, 0);
+                    
+                    if (beforeKana.length() == 0) {
+                        // 変換前のかな
+                        font.drawString(getBeforeHenkan(), 0, 0);
+                        
+                        // cursor
+                        drawCursor(font.stringWidth(getBeforeHenkanSubstr(0, cursorPosBeforeHenkan)), 0);
+                        
+                        // 描画位置を移動
+                        ofTranslate(font.stringWidth(getBeforeHenkan()) + margin, 0);
+                        
+                    }
+                    else {
+                        // 変換前のかなのカーソルの前
+                        font.drawString(getBeforeHenkanSubstr(0, cursorPosBeforeHenkan), 0, 0);
+                        
+                        // 描画位置を移動
+                        ofTranslate(font.stringWidth(getBeforeHenkanSubstr(0, cursorPosBeforeHenkan)) + margin, 0);
+                        
+                        // かな変換前のアルファベット部分
+                        font.drawString(getBeforeKana(), 0, 0);
+                        
+                        // 描画位置を移動
+                        ofTranslate(font.stringWidth(getBeforeKana()) + margin, 0);
+                        
+                        // cursor
+                        drawCursor(0, 0);
+                        
+                        // 変換前のかなのカーソルの後
+                        font.drawString(getBeforeHenkanSubstr(cursorPosBeforeHenkan, (int)beforeHenkan.length() - cursorPosBeforeHenkan), 0, 0);
+                        
+                        // 描画位置を移動
+                        ofTranslate(font.stringWidth(getBeforeHenkanSubstr(cursorPosBeforeHenkan, (int)beforeHenkan.length() - cursorPosBeforeHenkan)) + margin, 0);
+                    }
+                    
+                    // 確定後の部分のカーソルの後
+                    font.drawString(getAfterHenkanSubstr(cursorLine,cursorPos, (int)line[cursorLine].length() - cursorPos), 0, 0);
+                }
                 
-                // cursor
-                drawCursor(font.stringWidth(getBeforeHenkanSubstr(0, cursorPosBeforeHenkan)), 0);
+                break;
+            case KanaHenkan:
+                // 確定後の部分のカーソルの前
+                font.drawString(getAfterHenkanSubstr(cursorLine,0, cursorPos), 0, 0);
+                
+                // 描画位置を移動
+                ofTranslate(font.stringWidth(getAfterHenkanSubstr(cursorLine,0, cursorPos)) + margin, 0);
+                
+                // 確定前の部分
+                for (int i = 0; i < candidate.size(); ++i) {
+                    auto current = UTF32toUTF8(candidate[i][candidateSelected[i]]);
+                    
+                    // 変換中はアンダーバーを引く
+                    ofSetLineWidth(2);
+                    ofDrawLine(0, fontSize * 0.2, candidateW[i], fontSize * 0.2);
+                    
+                    // フォーカスが合っている場合はハイライトして、候補も書く
+                    if (i == candidateFocus) {
+                        ofPushStyle();
+                        ofFill();
+                        ofSetColor(90, 100);
+                        ofDrawRectangle(0, -fontSize * 1.2, candidateW[i], fontSize * 1.4);
+                        ofPopStyle();
+                        
+                        // 上下に他の候補も含めて並べる
+                        for (int j = 0; j < candidate[i].size(); ++j) {
+                            float offsetY = (j - (int)candidateSelected[i] + movingY) * fontSize * 1.5;
+                            auto str = UTF32toUTF8(candidate[i][j]);
+                            font.drawString(str, 0, offsetY);
+                        }
+                    }
+                    else {
+                        // 選択中でなければ一つだけ描画
+                        font.drawString(current, 0, 0);
+                    }
+                    
+                    ofTranslate(candidateW[i] + margin, 0);
+                }
                 
                 // 描画位置を移動
                 ofTranslate(font.stringWidth(getBeforeHenkan()) + margin, 0);
-
-            }
-            else {
-                // 変換前のかなのカーソルの前
-                font.drawString(getBeforeHenkanSubstr(0, cursorPosBeforeHenkan), 0, 0);
                 
-                // 描画位置を移動
-                ofTranslate(font.stringWidth(getBeforeHenkanSubstr(0, cursorPosBeforeHenkan)) + margin, 0);
-                                
-                // かな変換前のアルファベット部分
-                font.drawString(getBeforeKana(), 0, 0);
+                // 確定後の部分のカーソルの後
+                font.drawString(getAfterHenkanSubstr(cursorLine,cursorPos, (int)line[cursorLine].length() - cursorPos), 0, 0);
                 
-                // 描画位置を移動
-                ofTranslate(font.stringWidth(getBeforeKana()) + margin, 0);
-                
-                // cursor
-                drawCursor(0, 0);
-                
-                // 変換前のかなのカーソルの後
-                font.drawString(getBeforeHenkanSubstr(cursorPosBeforeHenkan, (int)beforeHenkan.length() - cursorPosBeforeHenkan), 0, 0);
-
-                // 描画位置を移動
-                ofTranslate(font.stringWidth(getBeforeHenkanSubstr(cursorPosBeforeHenkan, (int)beforeHenkan.length() - cursorPosBeforeHenkan)) + margin, 0);
+                break;
             }
             
-            // 確定後の部分のカーソルの後
-            font.drawString(getAfterHenkanSubstr(cursorPos, (int)afterHenkan.length() - cursorPos), 0, 0);
+            ofPopMatrix();
         }
-
-        break;
-	case KanaHenkan:
-		ofTranslate(x, y);
-
-		// 確定後の部分のカーソルの前
-		font.drawString(getAfterHenkanSubstr(0, cursorPos), 0, 0);
         
-        // 描画位置を移動
-		ofTranslate(font.stringWidth(getAfterHenkanSubstr(0, cursorPos)) + margin, 0);
-
-        // 確定前の部分
-		for (int i = 0; i < candidate.size(); ++i) {
-			auto current = UTF32toUTF8(candidate[i][candidateSelected[i]]);
-            
-            // 変換中はアンダーバーを引く
-            ofSetLineWidth(2);
-            ofDrawLine(0, fontSize * 0.2, candidateW[i], fontSize * 0.2);
-
-			// フォーカスが合っている場合はハイライトして、候補も書く
-			if (i == candidateFocus) {
-                ofPushStyle();
-                ofFill();
-                ofSetColor(90, 100);
-				ofDrawRectangle(0, -fontSize * 1.2, candidateW[i], fontSize * 1.4);
-                ofPopStyle();
-
-                // 上下に他の候補も含めて並べる
-                for (int j = 0; j < candidate[i].size(); ++j) {
-                    float offsetY = (j - (int)candidateSelected[i] + movingY) * fontSize * 1.5;
-                    auto str = UTF32toUTF8(candidate[i][j]);
-                    font.drawString(str, 0, offsetY);
-                }
-            }
-            else {
-                // 選択中でなければ一つだけ描画
-                font.drawString(current, 0, 0);
-            }
-            
-			ofTranslate(candidateW[i] + margin, 0);
-		}
-        
-        // 描画位置を移動
-        ofTranslate(font.stringWidth(getBeforeHenkan()) + margin, 0);
-        
-        // 確定後の部分のカーソルの後
-        font.drawString(getAfterHenkanSubstr(cursorPos, (int)afterHenkan.length() - cursorPos), 0, 0);
-
-		break;
-	}
-
-	ofPopMatrix();
+        // 次の行
+        ofTranslate(0, lineHeight);
+    }
+    ofPopMatrix();
 }
 
 void ofxGoogleIME::alphabetToHiragana(u32string & in, u32string & out, int &pos) {
@@ -600,13 +660,31 @@ void ofxGoogleIME::kakutei() {
     cursorPosBeforeHenkan = 0;
 }
 
+void ofxGoogleIME::newLine() {
+    // 新しい行
+    line.insert(line.begin() + cursorLine + 1, U"");
+    // 新しい行にカーソル以降の文字列を追加
+    line[cursorLine + 1] = line[cursorLine].substr(cursorPos, line[cursorLine].length() - cursorPos);
+    // 改行した行はカーソル前の文字列に詰める
+    line[cursorLine] = line[cursorLine].substr(0, cursorPos);
+    
+    cursorLine++;
+    cursorPos = 0;
+}
+
+void ofxGoogleIME::lineChange(int n) {
+    if (n == 0) return;
+    cursorLine = MAX(0, MIN(cursorLine + n, (int)line.size() - 1));
+    if (cursorPos > line[cursorLine].size()) cursorPos = line[cursorLine].length();
+}
+
 void ofxGoogleIME::addKey(const char &c) {
     // カーソル位置が範囲外なら修正
     if (cursorPos < 0) cursorPos = 0;
-    if (cursorPos > afterHenkan.length()) cursorPos = (int)afterHenkan.length();
+    if (cursorPos > line[cursorLine].length()) cursorPos = (int)line[cursorLine].length();
     
     // カーソルの位置に挿入する
-    afterHenkan = afterHenkan.substr(0, cursorPos) + char32_t(c) + afterHenkan.substr(cursorPos, afterHenkan.length() - cursorPos);
+    line[cursorLine] = line[cursorLine].substr(0, cursorPos) + char32_t(c) + line[cursorLine].substr(cursorPos, line[cursorLine].length() - cursorPos);
     
     // カーソルを移動
     cursorPos++;
@@ -614,34 +692,54 @@ void ofxGoogleIME::addKey(const char &c) {
 
 void ofxGoogleIME::addStr(const u32string &str) {
     // カーソルの位置に挿入する
-    afterHenkan = afterHenkan.substr(0, cursorPos) + str + afterHenkan.substr(cursorPos, afterHenkan.length() - cursorPos);
+    line[cursorLine] = line[cursorLine].substr(0, cursorPos) + str + line[cursorLine].substr(cursorPos, line[cursorLine].length() - cursorPos);
 
     // カーソルを移動
     cursorPos += str.length();
 }
 
-void ofxGoogleIME::backspaceCharacter(u32string &str, int &pos) {
+void ofxGoogleIME::backspaceCharacter(u32string &str, int &pos, bool lineMerge) {
     if (str.length() == 0) return; // 文字列が空
-    if (pos == 0) return; // カーソルが左端
-    if (str.length() < pos) pos = (int)str.length(); // カーソルが文字数より多い時は、文字の末尾にする
     
-    // カーソルの位置の文字だけ削除
-    str = str.substr(0, pos - 1) + str.substr(pos, str.length() - pos);
+    // カーソルが左端なら、改行を削除
+    if (pos == 0) {
+        if (lineMerge && cursorLine > 0) {
+            cursorPos = (int)line[cursorLine].length();
+            line[cursorLine - 1] += line[cursorLine];
+            line.erase(line.begin() + cursorLine);
+            cursorLine--;
+        }
+    }
     
-    // カーソル位置を一つ手前にする
-    pos--;
+    // カーソル位置の文字を削除
+    else {
+        if (str.length() < pos) pos = (int)str.length(); // カーソルが文字数より多い時は、文字の末尾にする
+        
+        // カーソルの位置の文字だけ削除
+        str = str.substr(0, pos - 1) + str.substr(pos, str.length() - pos);
+        
+        // カーソル位置を一つ手前にする
+        pos--;
+    }
 }
 
-void ofxGoogleIME::deleteCharacter(u32string &str, int &pos) {
+void ofxGoogleIME::deleteCharacter(u32string &str, int &pos, bool lineMerge) {
     if (str.length() == 0) return; // 文字列が空
-    if (str.length() == pos) return; // カーソルが右端
     if (str.length() < pos) {
         pos = (int)str.length(); // カーソルが文字数より多い時は、文字の末尾にする
-        return;
     }
-
-    // カーソルの位置の文字だけ削除
-    str = str.substr(0, pos) + str.substr(pos + 1, str.length() - pos - 1);
+    if (str.length() == pos) {
+        // カーソルが右端なら、次の行とマージして次の行を削除
+        if (lineMerge && cursorLine + 1 < line.size()) {
+            line[cursorLine] += line[cursorLine+1];
+            line.erase(line.begin() + cursorLine + 1);
+        }
+    }
+    else {
+        
+        // カーソルの位置の文字だけ削除
+        str = str.substr(0, pos) + str.substr(pos + 1, str.length() - pos - 1);
+    }
 }
 
 // 変換候補をトグルする
@@ -709,6 +807,9 @@ void ofxGoogleIME::candidateLengthChange(bool longer) {
 		c.clear();
 	}
 	candidate.clear();
+    
+    // 動きのイージングエフェクトを停止
+    movingY = 0;
 
 	henkan();
 }
@@ -1035,11 +1136,9 @@ void ofxGoogleIME::toggleMode() {
         state = Kana;
         break;
     case KanaNyuryoku:
-        beforeHenkan += beforeKana;
-        beforeKana = U"";
+        kakutei();
     case KanaHenkan:
-        afterHenkan += beforeHenkan;
-        beforeHenkan = U"";
+        kakutei();
     case Kana:
         state = Eisu;
         break;

@@ -27,15 +27,15 @@ public:
 
     // u32stringとして持っている文字列を変換してgetする
 	string getAll();
-	string getAfterHenkan();
-    string getAfterHenkanSubstr(int begin, int end);
+	string getAfterHenkan(int l);
+    string getAfterHenkanSubstr(int l, int begin, int end);
     string getBeforeKana();
 	string getBeforeHenkan();
     string getBeforeHenkanSubstr(int begin, int end);
 	void setFont(string path, float fontSize);
 	void draw(ofPoint pos);
 	void draw(float x, float y);
-
+    
 private:
 	bool enabled;
 
@@ -43,7 +43,7 @@ private:
 	char pastPressedKey;
 	u32string beforeKana; // ひらがな化する前の部分（1-2文字）
 	u32string beforeHenkan; // ひらがな化したあとの部分
-	u32string afterHenkan; // 変換後のテキスト
+	vector<u32string> line; // 変換後のテキスト。行ごとにvectorになっている
 
 	// アルファベットの文字列をお尻だけひらがなに変換して追加するメソッド
 	void alphabetToHiragana(u32string &in, u32string &out, int &pos);
@@ -54,8 +54,14 @@ private:
 	void henkan();
 	// 選択された変換を確定する
 	void kakutei();
+    // 改行（行を増やしてカーソルを移す）
+    void newLine();
+    
+    // 行移動
+    void lineChange(int n);
 
     // 文字入力のカーソル位置
+    int cursorLine; // 何行目を選択中か
     int cursorPos; // 変換後の何文字目か
     int cursorPosBeforeHenkan; // 変換前の何文字目か
     
@@ -64,8 +70,8 @@ private:
     void addStr(const u32string &str);
     
     // カーソルの位置の文字を一つ削除するメソッド
-    void backspaceCharacter(u32string &str, int &pos);
-    void deleteCharacter(u32string &str, int &pos);
+    void backspaceCharacter(u32string &str, int &pos, bool lineMerge = false);
+    void deleteCharacter(u32string &str, int &pos, bool lineMerge = false);
     
     // 確定前の変換中の文字列の候補リスト
 	// 描画に使うので、stringのまま持っておく
@@ -127,5 +133,8 @@ private:
     
     // 変換候補を選ぶときの動き (0-1)
     float movingY;
+    
+    // カーソルの点滅に使う変数
+    float cursorBlinkOffsetTime;
 };
 
