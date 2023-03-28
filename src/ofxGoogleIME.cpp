@@ -128,13 +128,6 @@ void ofxGoogleIME::keyPressed(ofKeyEventArgs & key) {
 
 		break;
             
-    case '`':
-        // Alt + '`' で Eisu, Kana トグル
-        if (ofGetKeyPressed(OF_KEY_ALT)) {
-            toggleMode();
-        }
-
-        break;
 		// 上下カーソルキー
 	case OF_KEY_UP:
         switch (state) {
@@ -230,6 +223,14 @@ void ofxGoogleIME::keyPressed(ofKeyEventArgs & key) {
 			state = Kana;
 			break;
 		}
+        
+    case '`':
+        // Alt + '`' で Eisu, Kana トグル
+        // ALTを押していなければ、通過して通常の文字キーとして処理される
+        if (ofGetKeyPressed(OF_KEY_ALT)) {
+            toggleMode();
+            break;
+        }
 
 		// 通常の文字キーの場合
 	default:
@@ -336,6 +337,7 @@ void ofxGoogleIME::setFont(string path, float fontSize) {
 	settings.addRanges(ofAlphabet::Latin);
 	settings.addRanges(ofAlphabet::Japanese);
     settings.addRange(ofUnicode::KatakanaHalfAndFullwidthForms);
+    settings.addRange(ofUnicode::range{0x301, 0x303F}); // 日本語の句読点などの記号
 	font.load(settings);
 }
 
@@ -521,8 +523,8 @@ void ofxGoogleIME::toHiragana(u32string &str, int checkPos) {
     
     // 入力中の手前の部分で2連続で同じアルファベットだったら "っ" にする
     for (int b = begin; b < checkPos; ++b) {
-        if (isAlphabet(line[cursorLine][b]) && line[cursorLine][b] == line[cursorLine][b+1]) {
-            line[cursorLine][b] = U'っ';
+        if (isAlphabet(beforeHenkan[b]) && beforeHenkan[b] == beforeHenkan[b+1]) {
+            beforeHenkan[b] = U'っ';
         }
     }
 }
@@ -1110,6 +1112,7 @@ void ofxGoogleIME::makeDictionary() {
 
 	// 記号
 	romajiToKana[U"-"] = U"ー";
+    romajiToKana[U"+"] = U"＋";
 	romajiToKana[U","] = U"、";
 	romajiToKana[U"."] = U"。";
 	romajiToKana[U"!"] = U"！";
@@ -1123,6 +1126,14 @@ void ofxGoogleIME::makeDictionary() {
 	romajiToKana[U"*"] = U"＊";
 	romajiToKana[U"("] = U"（";
 	romajiToKana[U")"] = U"）";
+    romajiToKana[U"{"] = U"『";
+    romajiToKana[U"}"] = U"』";
+    romajiToKana[U"["] = U"「";
+    romajiToKana[U"]"] = U"」";
+    romajiToKana[U"<"] = U"＜";
+    romajiToKana[U">"] = U"＞";
+    romajiToKana[U"|"] = U"｜";
+    romajiToKana[U"/"] = U"・";
 }
 
 void ofxGoogleIME::toggleMode() {
