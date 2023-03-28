@@ -25,9 +25,13 @@ public:
 
 	bool isEnabled() { return enabled; }
 
+    // u32stringとして持っている文字列を変換してgetする
 	string getAll();
 	string getAfterHenkan();
+    string getAfterHenkanSubstr(int begin, int end);
+    string getBeforeKana();
 	string getBeforeHenkan();
+    string getBeforeHenkanSubstr(int begin, int end);
 	void setFont(string path, float fontSize);
 	void draw(ofPoint pos);
 	void draw(float x, float y);
@@ -42,7 +46,7 @@ private:
 	u32string afterHenkan; // 変換後のテキスト
 
 	// アルファベットの文字列をお尻だけひらがなに変換して追加するメソッド
-	void alphabetToHiragana(u32string &in, u32string &out);
+	void alphabetToHiragana(u32string &in, u32string &out, int &pos);
 
 	ofJson json;
 
@@ -51,7 +55,19 @@ private:
 	// 選択された変換を確定する
 	void kakutei();
 
-	// 確定前の変換中の文字列の候補リスト
+    // 文字入力のカーソル位置
+    int cursorPos; // 変換後の何文字目か
+    int cursorPosBeforeHenkan; // 変換前の何文字目か
+    
+    // afterHenkanのカーソルの位置に文字を追加するメソッド
+    void addKey(const char &c);
+    void addStr(const u32string &str);
+    
+    // カーソルの位置の文字を一つ削除するメソッド
+    void backspaceCharacter(u32string &str, int &pos);
+    void deleteCharacter(u32string &str, int &pos);
+    
+    // 確定前の変換中の文字列の候補リスト
 	// 描画に使うので、stringのまま持っておく
 	vector<vector<u32string>> candidate;
 	vector<int> candidateSelected;
@@ -59,7 +75,7 @@ private:
 	void candidateFocusToggle(int toggle);
 	// 変換前の文字列（APIで帰ってきた、分割後の文字列）
 	vector<u32string> candidateKana;
-
+    
 	// 変換中のとき、フォーカスの当たっているcandidate
 	int candidateFocus;
 
