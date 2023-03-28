@@ -20,8 +20,9 @@ public:
 	void disable();
 	void clear();
 
+    void draw(ofEventArgs &args);
 	void keyPressed(ofKeyEventArgs &key);
-	void keyReleased(ofKeyEventArgs &key);
+    void mousePressed(ofMouseEventArgs &mouse);
 
 	bool isEnabled() { return enabled; }
 
@@ -29,24 +30,26 @@ public:
 	string getAll();
 	string getAfterHenkan(int l);
     string getAfterHenkanSubstr(int l, int begin, int end);
-    string getBeforeKana();
 	string getBeforeHenkan();
     string getBeforeHenkanSubstr(int begin, int end);
 	void setFont(string path, float fontSize);
+    void setPos(ofVec2f p);
+    void setPos(float x, float y);
+    
+private:
 	void draw(ofPoint pos);
 	void draw(float x, float y);
     
-private:
+    ofVec2f pos;
 	bool enabled;
 
 	// 入力されたキーのヒストリー
 	char pastPressedKey;
-	u32string beforeKana; // ひらがな化する前の部分（1-2文字）
 	u32string beforeHenkan; // ひらがな化したあとの部分
 	vector<u32string> line; // 変換後のテキスト。行ごとにvectorになっている
 
 	// アルファベットの文字列をお尻だけひらがなに変換して追加するメソッド
-	void alphabetToHiragana(u32string &in, u32string &out, int &pos);
+    void toHiragana(u32string &str, int checkPos);
 
 	ofJson json;
 
@@ -65,9 +68,9 @@ private:
     int cursorPos; // 変換後の何文字目か
     int cursorPosBeforeHenkan; // 変換前の何文字目か
     
-    // afterHenkanのカーソルの位置に文字を追加するメソッド
-    void addKey(const char &c);
-    void addStr(const u32string &str);
+    // 文字列の任意の位置に文字を追加するメソッド
+    void addKey(u32string &target, const char &c, int &p);
+    void addStr(u32string &target, const u32string &str, int &p);
     
     // カーソルの位置の文字を一つ削除するメソッド
     void backspaceCharacter(u32string &str, int &pos, bool lineMerge = false);

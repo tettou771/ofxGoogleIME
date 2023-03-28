@@ -15,7 +15,6 @@ class ofApp : public ofBaseApp{
 		void mousePressed(int x, int y, int button);
 		
     ofxGoogleIME ime;
-    ofVec2f inputPos;
     ofTrueTypeFont font;
     
     void addText(string str);

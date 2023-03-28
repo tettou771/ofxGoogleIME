@@ -17,10 +17,9 @@ void ofApp::setup(){
     
     ime.setFont(fontName, 20);
     ime.enable();
-    
-    ofSetBackgroundColor(200);
-    
-    inputPos = ofVec2f(20, 40);
+    ime.setPos(20, 60);
+
+    ofSetBackgroundColor(200);    
 }
 
 //--------------------------------------------------------------
@@ -31,9 +30,8 @@ void ofApp::update(){
 //--------------------------------------------------------------
 void ofApp::draw(){
     ofSetColor(50);
-    ime.draw(inputPos);
-    
-    int y = 70;
+
+    int y = 100;
     for (auto &t : texts) {
         font.drawString(t, 20, y);
         y += 5 + font.stringHeight(t);
@@ -65,7 +63,6 @@ void ofApp::keyReleased(int key){
 }
 
 void ofApp::mousePressed(int x, int y, int button){
-    inputPos = ofVec2f(x, y);
 }
 
 

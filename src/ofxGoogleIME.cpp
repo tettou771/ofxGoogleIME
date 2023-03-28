@@ -11,19 +11,24 @@ ofxGoogleIME::~ofxGoogleIME() {
 }
 
 void ofxGoogleIME::enable() {
-	enabled = true;
-	ofRegisterKeyEvents(this);
+    if (enabled) return;
 
-	clear();
+    enabled = true;
+    ofAddListener(ofEvents().keyPressed, this, &ofxGoogleIME::keyPressed);
+    ofAddListener(ofEvents().mousePressed, this, &ofxGoogleIME::mousePressed);
+    ofAddListener(ofEvents().draw, this, &ofxGoogleIME::draw, OF_EVENT_ORDER_AFTER_APP);
 }
 
 void ofxGoogleIME::disable() {
+    if (!enabled) return;
+    
 	enabled = false;
-	ofUnregisterKeyEvents(this);
+    ofRemoveListener(ofEvents().keyPressed, this, &ofxGoogleIME::keyPressed);
+    ofRemoveListener(ofEvents().mousePressed, this, &ofxGoogleIME::mousePressed);
+    ofRemoveListener(ofEvents().draw, this, &ofxGoogleIME::draw, OF_EVENT_ORDER_AFTER_APP);
 }
 
 void ofxGoogleIME::clear() {
-	beforeKana = U"";
 	beforeHenkan = U"";
     line.clear();
     line.push_back(U"");
@@ -50,6 +55,10 @@ void ofxGoogleIME::clear() {
     }
 }
 
+void ofxGoogleIME::draw(ofEventArgs &args) {
+    draw(pos);
+}
+
 void ofxGoogleIME::keyPressed(ofKeyEventArgs & key) {
     switch (key.key) {
 		// escで変換前文字をクリア
@@ -66,10 +75,7 @@ void ofxGoogleIME::keyPressed(ofKeyEventArgs & key) {
         }
                 
         // 一文字以上あれば変換中。カーソルの手前一文字を削除する
-        if (beforeKana.length() > 0) {
-            beforeKana = beforeKana.substr(0, beforeKana.length() - 1);
-        }
-        else if (beforeHenkan.length() > 0) {
+        if (beforeHenkan.length() > 0) {
             backspaceCharacter(beforeHenkan, cursorPosBeforeHenkan);
             // もし文字列が空になっていたら、Kanaに戻す
             if (beforeHenkan.length() == 0) state = Kana;
@@ -86,11 +92,7 @@ void ofxGoogleIME::keyPressed(ofKeyEventArgs & key) {
             kakutei();
         }
                 
-        // 一文字以上あれば変換中。
-        if (beforeKana.length() > 0) {
-        }
-        // 変換前の入力中
-        else if (beforeHenkan.length() > 0) {
+        if (beforeHenkan.length() > 0) {
             deleteCharacter(beforeHenkan, cursorPosBeforeHenkan);
             // もし文字列が空になっていたら、Kanaに戻す
             if (beforeHenkan.length() == 0) state = Kana;
@@ -111,10 +113,8 @@ void ofxGoogleIME::keyPressed(ofKeyEventArgs & key) {
 		else {
 			switch (state) {
 			case Eisu:
-                addKey(' ');
-				break;
-			case Kana:
-                addKey(' ');
+            case Kana:
+                addKey(line[cursorLine], ' ', cursorPos);
 				break;
 			case KanaNyuryoku:
 				henkan();
@@ -246,18 +246,15 @@ void ofxGoogleIME::keyPressed(ofKeyEventArgs & key) {
 			switch (state) {
                 // 直接入力
 			case Eisu:
-                addKey(key.key);
+                addKey(line[cursorLine], key.key, cursorPos);
                 break;
 
 				// かな系のstate
 			case Kana:
-                beforeKana += key.key;
-				alphabetToHiragana(beforeKana, beforeHenkan, cursorPosBeforeHenkan);
-				state = KanaNyuryoku;
-				break;
+                state = KanaNyuryoku;
 			case KanaNyuryoku:
-                beforeKana += key.key;
-				alphabetToHiragana(beforeKana, beforeHenkan, cursorPosBeforeHenkan);
+                addKey(beforeHenkan, key.key, cursorPosBeforeHenkan);
+				toHiragana(beforeHenkan, cursorPosBeforeHenkan);
 				break;
                     
                 // 変換中だとしたら最初に解除されているので、ここは通らない
@@ -276,7 +273,30 @@ void ofxGoogleIME::keyPressed(ofKeyEventArgs & key) {
     cursorBlinkOffsetTime = ofGetElapsedTimef();
 }
 
-void ofxGoogleIME::keyReleased(ofKeyEventArgs & key) {
+void ofxGoogleIME::mousePressed(ofMouseEventArgs &mouse) {
+    auto bbox = font.getStringBoundingBox(getAll(), pos.x, pos.y);
+    
+    // bbox内をクリックしたかどうか
+    if (!bbox.inside(mouse.x, mouse.y)) return;
+    
+    // 変換中なら確定してしまう
+    kakutei();
+    
+    ofVec2f rel = ofVec2f(mouse.x, mouse.y) - bbox.position;
+    
+    int lineNumber = ofMap(rel.y, 0, bbox.height, 0, line.size(), true);
+    
+    // 微妙な下端の位置をクリックして範囲外なら範囲内に収める
+    lineNumber = MIN(lineNumber, (int)line.size() - 1);
+    
+    // クリックしている文字を調べる
+    auto lineBbox = font.getStringBoundingBox(UTF32toUTF8(line[lineNumber]), pos.x, pos.y + font.getLineHeight() * lineNumber);
+    int posNumber = ofMap(mouse.x, 0, lineBbox.width, 0, line[lineNumber].size());
+    MIN(posNumber, line[cursorLine].size());
+    
+    // 選択する
+    cursorLine = lineNumber;
+    cursorPos = posNumber;
 }
 
 string ofxGoogleIME::getAll() {
@@ -303,16 +323,12 @@ string ofxGoogleIME::getAfterHenkanSubstr(int l, int begin, int end) {
     return UTF32toUTF8(line[l].substr(begin, end));
 }
 
-string ofxGoogleIME::getBeforeKana() {
-    return UTF32toUTF8(beforeKana);
-}
-
 string ofxGoogleIME::getBeforeHenkan() {
 	return UTF32toUTF8(beforeHenkan);
 }
 
 string ofxGoogleIME::getBeforeHenkanSubstr(int begin, int end) {
-    return UTF32toUTF8((beforeHenkan + beforeKana).substr(begin, end));
+    return UTF32toUTF8(beforeHenkan.substr(begin, end));
 }
 
 void ofxGoogleIME::setFont(string path, float fontSize) {
@@ -321,6 +337,14 @@ void ofxGoogleIME::setFont(string path, float fontSize) {
 	settings.addRanges(ofAlphabet::Japanese);
     settings.addRange(ofUnicode::KatakanaHalfAndFullwidthForms);
 	font.load(settings);
+}
+
+void ofxGoogleIME::setPos(ofVec2f p) {
+    pos = p;
+}
+
+void ofxGoogleIME::setPos(float x, float y) {
+    setPos(ofVec2f(x, y));
 }
 
 void ofxGoogleIME::draw(ofPoint pos) {
@@ -378,7 +402,7 @@ void ofxGoogleIME::draw(float x, float y) {
             case Kana:
             case Eisu:
             case KanaNyuryoku:
-                if (beforeKana.length() == 0 && beforeHenkan.length() == 0) {
+                if (beforeHenkan.length() == 0) {
                     // 確定後
                     font.drawString(getAfterHenkan(cursorLine), 0, 0);
                     
@@ -392,39 +416,14 @@ void ofxGoogleIME::draw(float x, float y) {
                     // 描画位置を移動
                     ofTranslate(font.stringWidth(getAfterHenkanSubstr(cursorLine,0, cursorPos)) + margin, 0);
                     
-                    if (beforeKana.length() == 0) {
-                        // 変換前のかな
-                        font.drawString(getBeforeHenkan(), 0, 0);
-                        
-                        // cursor
-                        drawCursor(font.stringWidth(getBeforeHenkanSubstr(0, cursorPosBeforeHenkan)), 0);
-                        
-                        // 描画位置を移動
-                        ofTranslate(font.stringWidth(getBeforeHenkan()) + margin, 0);
-                        
-                    }
-                    else {
-                        // 変換前のかなのカーソルの前
-                        font.drawString(getBeforeHenkanSubstr(0, cursorPosBeforeHenkan), 0, 0);
-                        
-                        // 描画位置を移動
-                        ofTranslate(font.stringWidth(getBeforeHenkanSubstr(0, cursorPosBeforeHenkan)) + margin, 0);
-                        
-                        // かな変換前のアルファベット部分
-                        font.drawString(getBeforeKana(), 0, 0);
-                        
-                        // 描画位置を移動
-                        ofTranslate(font.stringWidth(getBeforeKana()) + margin, 0);
-                        
-                        // cursor
-                        drawCursor(0, 0);
-                        
-                        // 変換前のかなのカーソルの後
-                        font.drawString(getBeforeHenkanSubstr(cursorPosBeforeHenkan, (int)beforeHenkan.length() - cursorPosBeforeHenkan), 0, 0);
-                        
-                        // 描画位置を移動
-                        ofTranslate(font.stringWidth(getBeforeHenkanSubstr(cursorPosBeforeHenkan, (int)beforeHenkan.length() - cursorPosBeforeHenkan)) + margin, 0);
-                    }
+                    // 変換前のかな
+                    font.drawString(getBeforeHenkan(), 0, 0);
+                    
+                    // cursor
+                    drawCursor(font.stringWidth(getBeforeHenkanSubstr(0, cursorPosBeforeHenkan)), 0);
+                    
+                    // 描画位置を移動
+                    ofTranslate(font.stringWidth(getBeforeHenkan()) + margin, 0);
                     
                     // 確定後の部分のカーソルの後
                     font.drawString(getAfterHenkanSubstr(cursorLine,cursorPos, (int)line[cursorLine].length() - cursorPos), 0, 0);
@@ -487,50 +486,45 @@ void ofxGoogleIME::draw(float x, float y) {
     ofPopMatrix();
 }
 
-void ofxGoogleIME::alphabetToHiragana(u32string & in, u32string & out, int &pos) {
-	// テーブルから該当のひらがなを探す
-	int iMax = MAX(3, (int)in.length());
-	for (int i = 3; i > 0; --i) {
-		if (in.length() >= i) {
-			// うしろからi文字切り取った文字列
-			u32string s = in.substr(in.length() - i, i);
-			//cout << "s: " << UTF32toUTF8(s) << endl;
+void ofxGoogleIME::toHiragana(u32string &str, int checkPos) {
+    // チェックするのは、入力中前後3つの文字列
+    int begin = MAX(0, checkPos - 3);
+    int end = MIN(checkPos + 3, (int)str.length());
+    
+    // アルファベットかどうか判定する関数
+    auto isAlphabet = [](char32_t c) {
+        return 0 < c && c < 128;
+    };
+    
+    // 長い文字列でヒットする場合を優先して探すので、3からデクリメントする
+    for (int len = 3; len > 0; len--) {
+        for (int b = begin; b < end - len + 1; ++b) {
+            int e = b + len;
 
-			// その文字列がひらがなに対応しているかどうか
-			bool keyExist = romajiToKana.count(s) != 0;
+            // len文字切り取った文字列
+            u32string s = str.substr(b, len);
 
-			// 対応しているものが見つかったら、それをkanaStackに入れる
-			if (keyExist) {
-				u32string kana = romajiToKana[s];
-				in = in.substr(0, in.length() - i);
+            // その文字列がひらがなに対応しているかどうか
+            bool keyExist = romajiToKana.count(s) != 0;
 
-				// もし n が一文字だけ残っていたらそれを "ん" にする
-				if (in == U"n") {
-					kana = U"ん" + kana;
-					in = in.substr(0, in.length() - 1);
-				}
-				// アルファベットが残ったら頭につけたままにする
-				kana = in + kana;
+            // 対応しているものが見つかったら、それを変換してすり替える
+            if (keyExist) {
+                u32string kana = romajiToKana[s];
+                str = str.substr(0, b) + kana + str.substr(e, str.length() - e);
 
-                // posの位置に挿入する
-                out = out.substr(0, pos) + kana + out.substr(pos, out.length() - pos);
-                pos += kana.length();
-
-				// ここで処理を終了する
-				// returnしなければ、この次の "っ" 判定にうつる
-				return;
-			}
-		}
-	}
-
-	// 2連続で同じアルファベットだったら "っ" にする
-	if (in.length() >= 2 && in[0] == in[1]) {
-		in = in.substr(in.length() - 1, 1);
-        // posの位置に挿入する
-        out = out.substr(0, pos) + U"っ" + out.substr(pos, out.length() - pos);
-        pos += 1;
-		return;
-	}
+                // 変換できたので終了
+                // このif文でreturnしなかったら、後段の "っ" の判定になる
+                return;
+            }
+        }
+    }
+    
+    // 入力中の手前の部分で2連続で同じアルファベットだったら "っ" にする
+    for (int b = begin; b < checkPos; ++b) {
+        if (isAlphabet(line[cursorLine][b]) && line[cursorLine][b] == line[cursorLine][b+1]) {
+            line[cursorLine][b] = U'っ';
+        }
+    }
 }
 
 void ofxGoogleIME::henkan() {
@@ -552,13 +546,9 @@ void ofxGoogleIME::henkan() {
 		}
 	};
 
-	// もし、beforeKana の最後に n が残っていたら それを ん にする
-	if (beforeKana.length() > 0 && beforeKana.substr(beforeKana.length() - 1, 1) == U"n") {
-		beforeKana = beforeKana.substr(0, beforeKana.length() - 1);
-		beforeHenkan += beforeKana + U"ん";
-	}
-	else {
-		beforeHenkan += beforeKana;
+	// もし、beforeHenkan の最後に n が残っていたら それを ん にする
+	if (beforeHenkan.length() > 0 && beforeHenkan[beforeHenkan.length() - 1] == U'n') {
+        beforeHenkan[beforeHenkan.length() - 1] = U'ん';
 	}
 
 	string encoded = percentEnc(beforeHenkan);
@@ -618,6 +608,11 @@ void ofxGoogleIME::henkan() {
 					}
 				}
 			}
+            
+            // candidateSelectedを、カーソルがあっている位置以降をゼロにする
+            for (int cs = candidateFocus; cs < candidate.size(); ++cs) {
+                candidateSelected[cs] = 0;
+            }
 		}
 	}
 	else {
@@ -625,17 +620,18 @@ void ofxGoogleIME::henkan() {
 	}
 
 	beforeHenkan = U"";
-	beforeKana = U"";
     cursorPosBeforeHenkan = 0;
 }
 
 void ofxGoogleIME::kakutei() {
+    // 変換するべき文字列がなければ無視する
+    if (state == Eisu || state == Kana) return;
+    
 	// 選択された候補を確定していく
     u32string kakuteiStr = U"";
 
     // かな入力中なら、変換せずそのまま確定
     if (state == KanaNyuryoku) {
-        kakuteiStr += beforeKana;
         kakuteiStr += beforeHenkan;
     }
     // 変換中なら、今選択されているものを確定
@@ -644,9 +640,8 @@ void ofxGoogleIME::kakutei() {
             kakuteiStr += candidate[i][candidateSelected[i]];
         }
     }
-    addStr(kakuteiStr);
+    addStr(line[cursorLine], kakuteiStr, cursorPos);
 
-	beforeKana = U"";
 	beforeHenkan = U"";
 
 	// 候補リストを空にする
@@ -675,27 +670,27 @@ void ofxGoogleIME::newLine() {
 void ofxGoogleIME::lineChange(int n) {
     if (n == 0) return;
     cursorLine = MAX(0, MIN(cursorLine + n, (int)line.size() - 1));
-    if (cursorPos > line[cursorLine].size()) cursorPos = line[cursorLine].length();
+    if (cursorPos > line[cursorLine].size()) cursorPos = (int)line[cursorLine].length();
 }
 
-void ofxGoogleIME::addKey(const char &c) {
+void ofxGoogleIME::addKey(u32string &target, const char &c, int &p) {
     // カーソル位置が範囲外なら修正
-    if (cursorPos < 0) cursorPos = 0;
-    if (cursorPos > line[cursorLine].length()) cursorPos = (int)line[cursorLine].length();
+    if (p < 0) p = 0;
+    if (p > target.length()) p = (int)target.length();
     
     // カーソルの位置に挿入する
-    line[cursorLine] = line[cursorLine].substr(0, cursorPos) + char32_t(c) + line[cursorLine].substr(cursorPos, line[cursorLine].length() - cursorPos);
+    target = target.substr(0, p) + char32_t(c) + target.substr(p, target.length() - p);
     
     // カーソルを移動
-    cursorPos++;
+    p++;
 }
 
-void ofxGoogleIME::addStr(const u32string &str) {
+void ofxGoogleIME::addStr(u32string &target, const u32string &str, int &p) {
     // カーソルの位置に挿入する
-    line[cursorLine] = line[cursorLine].substr(0, cursorPos) + str + line[cursorLine].substr(cursorPos, line[cursorLine].length() - cursorPos);
+    target = target.substr(0, p) + str + target.substr(p, target.length() - p);
 
     // カーソルを移動
-    cursorPos += str.length();
+    p += str.length();
 }
 
 void ofxGoogleIME::backspaceCharacter(u32string &str, int &pos, bool lineMerge) {
