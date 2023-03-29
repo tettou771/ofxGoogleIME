@@ -804,8 +804,8 @@ void ofxGoogleIME::candidateLengthChange(bool longer) {
 		if (candidateFocus == candidate.size() - 1) return;
 
 		candidateKana[candidateFocus] += candidateKana[candidateFocus + 1].substr(0, 1);
-		candidateKana[candidateFocus + 1] = candidateKana[candidateFocus + 1].substr(1, candidateKana[candidateFocus + 1].length() - 1);
-	}
+        candidateKana[candidateFocus + 1] = candidateKana[candidateFocus + 1].substr(1, candidateKana[candidateFocus + 1].length() - 1);
+    }
 	// 短くする場合
 	else {
 		// 既に1文字しかなかったら無視する
@@ -824,10 +824,7 @@ void ofxGoogleIME::candidateLengthChange(bool longer) {
 		// 空ならスキップする
 		if (candidateKana[i] == U"") continue;
 
-		// 先頭ではなかったらカンマを挿入する
-		if (0 < i) {
-			restruct += U",";
-		}
+        restruct += U",";
 
 		restruct += candidateKana[i];
 	}
