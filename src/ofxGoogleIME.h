@@ -27,7 +27,8 @@ public:
 	bool isEnabled() { return enabled; }
 
     // u32stringとして持っている文字列を変換してgetする
-	string getAll();
+	string getString();
+    u32string getU32String();
 	string getAfterHenkan(int l);
     string getAfterHenkanSubstr(int l, int begin, int end);
 	string getBeforeHenkan();
@@ -36,7 +37,7 @@ public:
     void setPos(ofVec2f p);
     void setPos(float x, float y);
     
-private:
+protected:
 	void draw(ofPoint pos);
 	void draw(float x, float y);
     
@@ -110,11 +111,14 @@ private:
 	// ソース Qiita http://qiita.com/benikabocha/items/1fc76b8cea404e9591cf
 	//wstring_convert<codecvt_utf8<uint32_t>, uint32_t> convert8_32;
     
-    // 上記でもエラーが出たので、ChatGPTで聞いた変換器lolo
-    std::wstring_convert<std::codecvt_utf8<char32_t>, char32_t> convert8_32;
+    // 上記でもエラーが出たので、ChatGPTで聞いた変換器
+    static std::wstring_convert<std::codecvt_utf8<char32_t>, char32_t> convert8_32;
 
-	string UTF32toUTF8(const u32string &u32str);
-	u32string UTF8toUTF32(const string &str);
+public:
+	static string UTF32toUTF8(const u32string &u32str);
+    static string UTF32toUTF8(const char32_t &u32char);
+	static u32string UTF8toUTF32(const string &str);
+private:
 	// ローマ字-ひらがな変換用の辞書
 	map<u32string, u32string> romajiToKana;
 	void makeDictionary();

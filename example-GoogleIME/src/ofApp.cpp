@@ -19,7 +19,7 @@ void ofApp::setup(){
     ime.enable();
     ime.setPos(20, 60);
 
-    ofSetBackgroundColor(200);    
+    ofSetBackgroundColor(200);
 }
 
 //--------------------------------------------------------------
@@ -46,7 +46,7 @@ void ofApp::keyPressed(int key){
     case OF_KEY_RETURN:
         // Ctrl
         if (ofGetKeyPressed(OF_KEY_CONTROL)) {
-            addText(ime.getAll());
+            addText(ime.getString());
             ime.disable();
             ime.clear();
         }

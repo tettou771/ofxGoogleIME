@@ -1,5 +1,7 @@
 #include "ofxGoogleIME.h"
 
+std::wstring_convert<std::codecvt_utf8<char32_t>, char32_t> ofxGoogleIME::convert8_32;
+
 ofxGoogleIME::ofxGoogleIME() {
 	ofSetEscapeQuitsApp(false);
 	makeDictionary();
@@ -80,7 +82,7 @@ void ofxGoogleIME::keyPressed(ofKeyEventArgs & key) {
             // もし文字列が空になっていたら、Kanaに戻す
             if (beforeHenkan.length() == 0) state = Kana;
         }
-        else if (line[cursorLine].length() > 0) {
+        else {
             backspaceCharacter(line[cursorLine], cursorPos, true);
         }
 		break;
@@ -97,7 +99,7 @@ void ofxGoogleIME::keyPressed(ofKeyEventArgs & key) {
             // もし文字列が空になっていたら、Kanaに戻す
             if (beforeHenkan.length() == 0) state = Kana;
          }
-        else if (line[cursorLine].length() > 0) {
+        else {
             deleteCharacter(line[cursorLine], cursorPos, true);
         }
         break;
@@ -275,7 +277,7 @@ void ofxGoogleIME::keyPressed(ofKeyEventArgs & key) {
 }
 
 void ofxGoogleIME::mousePressed(ofMouseEventArgs &mouse) {
-    auto bbox = font.getStringBoundingBox(getAll(), pos.x, pos.y);
+    auto bbox = font.getStringBoundingBox(getString(), pos.x, pos.y);
     
     // bbox内をクリックしたかどうか
     if (!bbox.inside(mouse.x, mouse.y)) return;
@@ -300,7 +302,7 @@ void ofxGoogleIME::mousePressed(ofMouseEventArgs &mouse) {
     cursorPos = posNumber;
 }
 
-string ofxGoogleIME::getAll() {
+string ofxGoogleIME::getString() {
     string all = "";
     for (auto &a : line) {
         all += UTF32toUTF8(a);
@@ -309,6 +311,17 @@ string ofxGoogleIME::getAll() {
         }
     }
 	return all;
+}
+
+u32string ofxGoogleIME::getU32String() {
+    u32string all = U"";
+    for (auto &a : line) {
+        all += a;
+        if (a != line.back()) {
+            all += U'\n';
+        }
+    }
+    return all;
 }
 
 string ofxGoogleIME::getAfterHenkan(int l) {
@@ -380,15 +393,26 @@ void ofxGoogleIME::draw(float x, float y) {
             // それぞれの文字列
             string after = getAfterHenkan(cursorLine);
             string before = getBeforeHenkan();
-            float afterW = font.getStringBoundingBox(after, 0, 0).width;
+            float afterW = font.stringWidth(after);
             vector<float> candidateW;
             float candidateTotalW = 0;
             for (int i = 0; i < candidate.size(); ++i) {
                 auto utf8String = UTF32toUTF8(candidate[i][candidateSelected[i]]);
-                candidateW.push_back(font.getStringBoundingBox(utf8String, 0, 0).width);
+                
+                // candidateWは
+                // 候補選択中のものだけは全候補の長いものに合わせる
+                float w = 0;
+                if (i == candidateFocus) {
+                    for (auto &c : candidate[i]) {
+                        w = MAX(w, font.stringWidth(UTF32toUTF8(c)));
+                    }
+                } else {
+                    w =                     font.stringWidth(UTF32toUTF8(candidate[i][candidateSelected[i]]));
+                }
+                candidateW.push_back(w);
                 candidateTotalW += candidateW.back();
             }
-            float beforeW = font.getStringBoundingBox(before, 0, 0).width;
+            float beforeW = font.stringWidth(before);
             float margin = font.getSize() * 0.1;
             
             // 入力カーソルを描画する関数
@@ -420,12 +444,17 @@ void ofxGoogleIME::draw(float x, float y) {
                     
                     // 変換前のかな
                     font.drawString(getBeforeHenkan(), 0, 0);
-                    
+
+                    // 入力中はアンダーバーを引く
+                    ofSetLineWidth(2);
+                    float w = font.stringWidth(getBeforeHenkan());
+                    ofDrawLine(0, fontSize * 0.2, w, fontSize * 0.2);
+
                     // cursor
                     drawCursor(font.stringWidth(getBeforeHenkanSubstr(0, cursorPosBeforeHenkan)), 0);
                     
                     // 描画位置を移動
-                    ofTranslate(font.stringWidth(getBeforeHenkan()) + margin, 0);
+                    ofTranslate(w + margin, 0);
                     
                     // 確定後の部分のカーソルの後
                     font.drawString(getAfterHenkanSubstr(cursorLine,cursorPos, (int)line[cursorLine].length() - cursorPos), 0, 0);
@@ -449,15 +478,20 @@ void ofxGoogleIME::draw(float x, float y) {
                     
                     // フォーカスが合っている場合はハイライトして、候補も書く
                     if (i == candidateFocus) {
+                        // 1行の高さ
+                        float lh = font.getLineHeight();
+                        
                         ofPushStyle();
+                        
+                        // 候補全体に座布団を敷く
                         ofFill();
                         ofSetColor(90, 100);
-                        ofDrawRectangle(0, -fontSize * 1.2, candidateW[i], fontSize * 1.4);
+                        ofDrawRectangle(0, lh * (0.2-candidateSelected[i] - 1), candidateW[i], lh * candidate[i].size());
                         ofPopStyle();
                         
                         // 上下に他の候補も含めて並べる
                         for (int j = 0; j < candidate[i].size(); ++j) {
-                            float offsetY = (j - (int)candidateSelected[i] + movingY) * fontSize * 1.5;
+                            float offsetY = (j - (int)candidateSelected[i] + movingY) * lh;
                             auto str = UTF32toUTF8(candidate[i][j]);
                             font.drawString(str, 0, offsetY);
                         }
@@ -513,10 +547,6 @@ void ofxGoogleIME::toHiragana(u32string &str, int checkPos) {
             if (keyExist) {
                 u32string kana = romajiToKana[s];
                 str = str.substr(0, b) + kana + str.substr(e, str.length() - e);
-
-                // 変換できたので終了
-                // このif文でreturnしなかったら、後段の "っ" の判定になる
-                return;
             }
         }
     }
@@ -525,6 +555,15 @@ void ofxGoogleIME::toHiragana(u32string &str, int checkPos) {
     for (int b = begin; b < checkPos; ++b) {
         if (isAlphabet(beforeHenkan[b]) && beforeHenkan[b] == beforeHenkan[b+1]) {
             beforeHenkan[b] = U'っ';
+        }
+    }
+    
+    // 入力中の手前の部分で、単体のnが残っていたら "ん" にする
+    for (int b = begin; b < checkPos; ++b) {
+        if (beforeHenkan[b] == U'n') {
+            if (b < cursorPosBeforeHenkan - 1 && beforeHenkan[b+1] != u'y') {
+                beforeHenkan[b] = U'ん';
+            }
         }
     }
 }
@@ -696,12 +735,10 @@ void ofxGoogleIME::addStr(u32string &target, const u32string &str, int &p) {
 }
 
 void ofxGoogleIME::backspaceCharacter(u32string &str, int &pos, bool lineMerge) {
-    if (str.length() == 0) return; // 文字列が空
-    
     // カーソルが左端なら、改行を削除
     if (pos == 0) {
         if (lineMerge && cursorLine > 0) {
-            cursorPos = (int)line[cursorLine].length();
+            cursorPos = (int)line[cursorLine - 1].length();
             line[cursorLine - 1] += line[cursorLine];
             line.erase(line.begin() + cursorLine);
             cursorLine--;
@@ -721,7 +758,6 @@ void ofxGoogleIME::backspaceCharacter(u32string &str, int &pos, bool lineMerge) 
 }
 
 void ofxGoogleIME::deleteCharacter(u32string &str, int &pos, bool lineMerge) {
-    if (str.length() == 0) return; // 文字列が空
     if (str.length() < pos) {
         pos = (int)str.length(); // カーソルが文字数より多い時は、文字の末尾にする
     }
@@ -733,7 +769,6 @@ void ofxGoogleIME::deleteCharacter(u32string &str, int &pos, bool lineMerge) {
         }
     }
     else {
-        
         // カーソルの位置の文字だけ削除
         str = str.substr(0, pos) + str.substr(pos + 1, str.length() - pos - 1);
     }
@@ -893,6 +928,10 @@ string ofxGoogleIME::UTF32toUTF8(const u32string & u32str) {
 	return convert8_32.to_bytes(reinterpret_cast<const char32_t*>(u32str.c_str()));
 }
 
+string ofxGoogleIME::UTF32toUTF8(const char32_t &u32char) {
+    return convert8_32.to_bytes(u32char);
+}
+
 u32string ofxGoogleIME::UTF8toUTF32(const string & str) {
 	auto A = convert8_32.from_bytes(str);
 	return u32string(A.cbegin(), A.cend());
@@ -940,7 +979,7 @@ void ofxGoogleIME::makeDictionary() {
 	romajiToKana[U"ha"] = U"は";
 	romajiToKana[U"hi"] = U"ひ";
 	romajiToKana[U"hu"] = U"ふ";
-	romajiToKana[U"fu"] = U"ふ";
+	romajiToKana[U"hu"] = U"ふ";
 	romajiToKana[U"he"] = U"へ";
 	romajiToKana[U"ho"] = U"ほ";
 	romajiToKana[U"ma"] = U"ま";
@@ -960,6 +999,18 @@ void ofxGoogleIME::makeDictionary() {
 	romajiToKana[U"wo"] = U"を";
 	romajiToKana[U"nn"] = U"ん";
 	romajiToKana[U"xn"] = U"ん";
+
+    // fの列
+    romajiToKana[U"fa"] = U"ふぁ";
+    romajiToKana[U"fi"] = U"ふぃ";
+    romajiToKana[U"fu"] = U"ふ";
+    romajiToKana[U"fe"] = U"ふぇ";
+    romajiToKana[U"fo"] = U"ふぉ";
+    romajiToKana[U"fya"] = U"ふゃ";
+    romajiToKana[U"fyi"] = U"ふぃ";
+    romajiToKana[U"fyu"] = U"ふゅ";
+    romajiToKana[U"fye"] = U"ふぇ";
+    romajiToKana[U"fyo"] = U"ふょ";
 
 	// 濁音
 	romajiToKana[U"ga"] = U"が";
@@ -1011,7 +1062,7 @@ void ofxGoogleIME::makeDictionary() {
 	romajiToKana[U"xye"] = U"ぇ";
 	romajiToKana[U"lyo"] = U"ょ";
 	romajiToKana[U"xyo"] = U"ょ";
-
+    
 	romajiToKana[U"kya"] = U"きゃ";
 	romajiToKana[U"kyi"] = U"きぃ";
 	romajiToKana[U"kyu"] = U"きゅ";
