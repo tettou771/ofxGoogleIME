@@ -42,7 +42,7 @@ protected:
 	void draw(float x, float y);
     
     ofVec2f pos;
-	bool enabled;
+	bool enabled = false;
 
 	// 入力されたキーのヒストリー
 	char pastPressedKey;
@@ -106,13 +106,15 @@ protected:
 	// リンクエラーの出る変換器
 	//wstring_convert<codecvt_utf8<char32_t>, char32_t> convert8_32;
 	
+#ifdef WIN32
 	// 変換器(UTF8 UTF32)
 	// char32_t を使うとVS2015でリンクエラーとなるので、unit32_t を使っている
 	// ソース Qiita http://qiita.com/benikabocha/items/1fc76b8cea404e9591cf
-	//wstring_convert<codecvt_utf8<uint32_t>, uint32_t> convert8_32;
-    
+	static wstring_convert<codecvt_utf8<uint32_t>, uint32_t> convert8_32;
+#else    
     // 上記でもエラーが出たので、ChatGPTで聞いた変換器
     static std::wstring_convert<std::codecvt_utf8<char32_t>, char32_t> convert8_32;
+#endif
 
 public:
 	static string UTF32toUTF8(const u32string &u32str);
