@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 // 文字コードの変換に必要
 #include <codecvt>

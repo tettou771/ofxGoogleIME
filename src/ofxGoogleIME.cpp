@@ -1,4 +1,4 @@
-#include "ofxGoogleIME.h"
+﻿#include "ofxGoogleIME.h"
 
 std::wstring_convert<std::codecvt_utf8<char32_t>, char32_t> ofxGoogleIME::convert8_32;
 
