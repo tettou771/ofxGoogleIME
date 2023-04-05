@@ -1,6 +1,10 @@
 #include "ofxGoogleIME.h"
 
+#ifdef WIN32
+wstring_convert<codecvt_utf8<uint32_t>, uint32_t> ofxGoogleIME::convert8_32;
+#else
 std::wstring_convert<std::codecvt_utf8<char32_t>, char32_t> ofxGoogleIME::convert8_32;
+#endif
 
 ofxGoogleIME::ofxGoogleIME() {
 	ofSetEscapeQuitsApp(false);
@@ -913,7 +917,11 @@ string ofxGoogleIME::percentEnc(u32string u32str) {
 }
 
 string ofxGoogleIME::UTF32toUTF8(const u32string & u32str) {
+#ifdef WIN32
+    return convert8_32.to_bytes(reinterpret_cast<const uint32_t*>(u32str.c_str()));
+#else
 	return convert8_32.to_bytes(reinterpret_cast<const char32_t*>(u32str.c_str()));
+#endif
 }
 
 string ofxGoogleIME::UTF32toUTF8(const char32_t &u32char) {
