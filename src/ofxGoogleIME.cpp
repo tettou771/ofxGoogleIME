@@ -1,4 +1,4 @@
-﻿#include "ofxGoogleIME.h"
+#include "ofxGoogleIME.h"
 
 std::wstring_convert<std::codecvt_utf8<char32_t>, char32_t> ofxGoogleIME::convert8_32;
 
@@ -607,15 +607,6 @@ void ofxGoogleIME::henkan() {
         // エラーをキャッチして、メッセージを出力する
         std::cerr << "JSON parse error: " << e.what() << std::endl;
     }
-
-#ifdef _DEBUG
-	// デバッグ用に変換結果を保存
-	ofFile f;
-	f.open("googleAPIresult.txt", ofFile::Append);
-	f << "encoded: " << encoded << endl;
-	f << json.dump();
-	f.close();
-#endif
 
 	if (result) {
 		// json内のデータ（変換候補）を集める
