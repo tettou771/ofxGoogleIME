@@ -1156,6 +1156,12 @@ void ofxGoogleIME::makeDictionary() {
 	romajiToKana[U"whi"] = U"うぃ";
 	romajiToKana[U"whe"] = U"うぇ";
 	romajiToKana[U"who"] = U"うぉ";
+    
+    romajiToKana[U"dha"] = U"でゃ";
+    romajiToKana[U"dhi"] = U"でぃ";
+    romajiToKana[U"dhu"] = U"でゅ";
+    romajiToKana[U"dhe"] = U"でぇ";
+    romajiToKana[U"dho"] = U"でょ";
 
 	// 記号
 	romajiToKana[U"-"] = U"ー";
