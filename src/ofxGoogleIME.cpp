@@ -578,15 +578,15 @@ void ofxGoogleIME::henkan() {
 	// tryつきlog
 	auto tryCout = [](ofJson a, int n) {
 		for (int i = 0; i < n; ++i) {
-			cout << '\t';
+			ofLogVerbose("ofxGoogleIME") << '\t';
 		}
 		try {
             string astr = a;
-			cout << astr << endl;
+			ofLogVerbose("ofxGoogleIME") << astr << endl;
 			return true;
 		}
 		catch (exception e) {
-			cout << e.what() << endl;
+			ofLogVerbose("ofxGoogleIME") << e.what() << endl;
 			return false;
 		}
 	};
@@ -597,7 +597,7 @@ void ofxGoogleIME::henkan() {
 	}
 
 	string encoded = percentEnc(beforeHenkan);
-	cout << "percentEnc: " << encoded << endl;
+	ofLogVerbose("ofxGoogleIME") << "percentEnc: " << encoded << endl;
     
     auto response =  ofLoadURL("http://www.google.com/transliterate?langpair=ja-Hira|ja&text=" + encoded);
     
@@ -652,7 +652,7 @@ void ofxGoogleIME::henkan() {
 		}
 	}
 	else {
-		cout << "GJI API error." << endl;
+		ofLogVerbose("ofxGoogleIME") << "GJI API error." << endl;
 	}
 
 	beforeHenkan = U"";
