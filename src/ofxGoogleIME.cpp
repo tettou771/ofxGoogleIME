@@ -66,212 +66,269 @@ void ofxGoogleIME::draw(ofEventArgs &args) {
 }
 
 void ofxGoogleIME::keyPressed(ofKeyEventArgs & key) {
-    switch (key.key) {
-		// escで変換前文字をクリア
-	case OF_KEY_ESC:
-		beforeHenkan = U"";
-        cursorPosBeforeHenkan = 0;
-		break;
-
-        // BSで一文字削除
-	case OF_KEY_BACKSPACE:
-        // 変換中なら、今の状態で確定する
-        if (state == KanaHenkan) {
-            kakutei();
-        }
-                
-        // 一文字以上あれば変換中。カーソルの手前一文字を削除する
-        if (beforeHenkan.length() > 0) {
-            backspaceCharacter(beforeHenkan, cursorPosBeforeHenkan);
-            // もし文字列が空になっていたら、Kanaに戻す
-            if (beforeHenkan.length() == 0) state = Kana;
-        }
-        else {
-            backspaceCharacter(line[cursorLine], cursorPos, true);
-        }
-		break;
-        
-        // DELで右を一文字削除
-    case OF_KEY_DEL:
-        // 変換中なら、今の状態で確定する
-        if (state == KanaHenkan) {
-            kakutei();
-        }
-                
-        if (beforeHenkan.length() > 0) {
-            deleteCharacter(beforeHenkan, cursorPosBeforeHenkan);
-            // もし文字列が空になっていたら、Kanaに戻す
-            if (beforeHenkan.length() == 0) state = Kana;
-         }
-        else {
-            deleteCharacter(line[cursorLine], cursorPos, true);
-        }
-        break;
-
-		// スペースキー（stateのトグルか、変換）
-	case ' ':
-		// Ctrl + Space で Eisu, Kana トグル
-		if ((ofGetKeyPressed(OF_KEY_COMMAND) && key.key == ' ')) {
+    // モディファイやキー押しの場合
+#ifdef TARGET_OS_MAC
+    char ctrl = OF_KEY_COMMAND;
+#else
+    char ctrl = OF_KEY_CONTROL;
+#endif
+    
+    // Ctrl
+    if (ofGetKeyPressed(ctrl)){
+        // Ctrl + Space で Eisu, Kana トグル
+        switch (key.key) {
+        case ' ':
             toggleMode();
-		}
+            break;
+        case 'c':
+            // TODO
+            // copy text
+            break;
+        case 'v':
+            // paste
+            {
+                string clip = ofGetClipboardString();
+                for (auto c : clip) {
+                    if (c == '\n') newLine();
+                    else addKey(line[cursorLine], c, cursorPos);
+                }
+            }
+            break;
+            
+        default:break;
+        }
+    }
+    
+    // Alt
+    else if (ofGetKeyPressed(OF_KEY_ALT)) {
+        switch (key.key) {
+        case '`':
+        case '~':
+            // Alt + '`' または '~' で Eisu, Kana トグル
+            // ALTを押していなければ、通過して通常の文字キーとして処理される
+            toggleMode();
+            break;
+        default:break;
+        }
+    }
+    
+    // Ctrl, Alt を押してない場合
+    else {
+        
+        switch (key.key) {
+            // escで変換前文字をクリア
+        case OF_KEY_ESC:
+            beforeHenkan = U"";
+            cursorPosBeforeHenkan = 0;
+            break;
+            
+            // BSで一文字削除
+        case OF_KEY_BACKSPACE:
+            // まず、選択範囲を削除
+            deleteSelected();
 
-		// 入力切替ではない場合
-		else {
-			switch (state) {
-			case Eisu:
+            // 変換中なら、今の状態で確定する
+            if (state == KanaHenkan) {
+                kakutei();
+            }
+            
+            // 一文字以上あれば変換中。カーソルの手前一文字を削除する
+            if (beforeHenkan.length() > 0) {
+                backspaceCharacter(beforeHenkan, cursorPosBeforeHenkan);
+                // もし文字列が空になっていたら、Kanaに戻す
+                if (beforeHenkan.length() == 0) state = Kana;
+            }
+            else {
+                backspaceCharacter(line[cursorLine], cursorPos, true);
+            }
+            break;
+            
+            // DELで右を一文字削除
+        case OF_KEY_DEL:
+            // まず、選択範囲を削除
+            deleteSelected();
+            
+            // 変換中なら、今の状態で確定する
+            if (state == KanaHenkan) {
+                kakutei();
+            }
+            
+            if (beforeHenkan.length() > 0) {
+                deleteCharacter(beforeHenkan, cursorPosBeforeHenkan);
+                // もし文字列が空になっていたら、Kanaに戻す
+                if (beforeHenkan.length() == 0) state = Kana;
+            }
+            else {
+                deleteCharacter(line[cursorLine], cursorPos, true);
+            }
+            break;
+            
+            // スペースキー（変換）
+        case ' ':
+            // 入力切替ではない場合
+            switch (state) {
+            case Eisu:
             case Kana:
                 addKey(line[cursorLine], ' ', cursorPos);
-				break;
-			case KanaNyuryoku:
-				henkan();
-				break;
-			case KanaHenkan:
-				// 変換候補をトグルする
-				candidateToggle(1);
-				break;
-			}
-		}
-
-		break;
+                break;
+            case KanaNyuryoku:
+                henkan();
+                break;
+            case KanaHenkan:
+                // 変換候補をトグルする
+                candidateToggle(1);
+                break;
+            }
             
-		// 上下カーソルキー
-	case OF_KEY_UP:
-        switch (state) {
-        case KanaHenkan:
-            candidateToggle(-1);
-            break;
-        case KanaNyuryoku:
-            henkan();
-            break;
-        default:
-            lineChange(-1);
-            break;
-        }
-		break;
-	case OF_KEY_DOWN:
-        switch (state) {
-        case KanaHenkan:
-            candidateToggle(1);
-            break;
-        case KanaNyuryoku:
-            henkan();
-            break;
-        default:
-            lineChange(1);
-            break;
-        }
-		break;
-
-		// 左右カーソルキー
-	case OF_KEY_LEFT:
-        switch (state) {
-            // 変換中
-        case KanaHenkan:
-            // shiftを押していたら候補の長さを変える
-            if (ofGetKeyPressed(OF_KEY_SHIFT)) candidateLengthChange(false);
-            else candidateFocusToggle(-1);
             break;
             
-            // 変換前はカーソル移動
-        case Eisu:
-        case Kana:
-            if (cursorPos > 0) {
-                cursorPos--;
-            }
-            break;
-            // 変換前のひらがな入力中は、その中で移動
-        case KanaNyuryoku:
-            if (cursorPosBeforeHenkan > 0) {
-                cursorPosBeforeHenkan--;
-            }
-            break;
-		}
-		break;
-	case OF_KEY_RIGHT:
-		switch (state) {
-        case KanaHenkan:
-			// shiftを押していたら候補の長さを帰る
-			if (ofGetKeyPressed(OF_KEY_SHIFT)) candidateLengthChange(true);
-			else candidateFocusToggle(1);
-            break;
-            // 変換前はカーソル移動
-        case Eisu:
-        case Kana:
-            cursorPos++;
-            if (cursorPos > line[cursorLine].length()) {
-                cursorPos = (int)line[cursorLine].length();
-            }
-            break;
-            // 変換前のひらがな入力中は、その中で移動
-        case KanaNyuryoku:
-            cursorPosBeforeHenkan++;
-            if (cursorPosBeforeHenkan > beforeHenkan.length()) {
-                cursorPosBeforeHenkan = (int)beforeHenkan.length();
-            }
-            break;
-		}
-		break;
-
-		// 決定キーで実行、キーをクリアする
-	case OF_KEY_RETURN:
-		switch (state) {
-                // 変換する文字列がなければ、改行(新しい行)を追加
-		case Eisu:
-		case Kana:
-            newLine();
-			break;
-
-                // 何らかの変換前文字列があれば
-                // スタック上の文字列を確定して追加
-		case KanaNyuryoku:
-		case KanaHenkan:
-			kakutei();
-			state = Kana;
-			break;
-		}
-        
-    case '`':
-        // Alt + '`' で Eisu, Kana トグル
-        // ALTを押していなければ、通過して通常の文字キーとして処理される
-        if (ofGetKeyPressed(OF_KEY_ALT)) {
+            // これもstateのトグル
+        case OF_KEY_F1:
+        case 244: // 全角/半角
             toggleMode();
             break;
-        }
-
-		// 通常の文字キーの場合
-	default:
-
-		// 文字の入力
-		if (32 <= key.key && key.key <= 126) {
-			// 変換候補を選んでいるときに文字を入力すると
-			// その時点で確定する
-			if (state == KanaHenkan) {
-				kakutei();
-				state = KanaNyuryoku;
-			}
-
-			switch (state) {
-                // 直接入力
-			case Eisu:
-                addKey(line[cursorLine], key.key, cursorPos);
+            
+            // 上下カーソルキー
+        case OF_KEY_UP:
+            switch (state) {
+            case KanaHenkan:
+                candidateToggle(-1);
                 break;
-
-				// かな系のstate
-			case Kana:
-                state = KanaNyuryoku;
-			case KanaNyuryoku:
-                addKey(beforeHenkan, key.key, cursorPosBeforeHenkan);
-				toHiragana(beforeHenkan, cursorPosBeforeHenkan);
-				break;
-                    
-                // 変換中だとしたら最初に解除されているので、ここは通らない
+            case KanaNyuryoku:
+                henkan();
+                break;
             default:
+                lineChange(-1);
                 break;
-			}
-
-			break;
-		}
-	}
+            }
+            break;
+        case OF_KEY_DOWN:
+            switch (state) {
+            case KanaHenkan:
+                candidateToggle(1);
+                break;
+            case KanaNyuryoku:
+                henkan();
+                break;
+            default:
+                lineChange(1);
+                break;
+            }
+            break;
+            
+            // 左右カーソルキー
+        case OF_KEY_LEFT:
+            switch (state) {
+                // 変換中
+            case KanaHenkan:
+                // shiftを押していたら候補の長さを変える
+                if (ofGetKeyPressed(OF_KEY_SHIFT)) candidateLengthChange(false);
+                else candidateFocusToggle(-1);
+                break;
+                
+                // 変換前はカーソル移動
+            case Eisu:
+            case Kana:
+                // shiftを押していたら選択範囲の長さを変える
+                if (ofGetKeyPressed(OF_KEY_SHIFT)) {
+                    //TODO
+                }else{
+                    if (cursorPos > 0) {
+                        cursorPos--;
+                    }
+                }
+                break;
+                // 変換前のひらがな入力中は、その中で移動
+            case KanaNyuryoku:
+                if (cursorPosBeforeHenkan > 0) {
+                    cursorPosBeforeHenkan--;
+                }
+                break;
+            }
+            break;
+        case OF_KEY_RIGHT:
+            switch (state) {
+            case KanaHenkan:
+                // shiftを押していたら候補の長さを帰る
+                if (ofGetKeyPressed(OF_KEY_SHIFT)) candidateLengthChange(true);
+                else candidateFocusToggle(1);
+                break;
+                // 変換前はカーソル移動
+            case Eisu:
+            case Kana:
+                // shiftを押していたら選択範囲の長さを変える
+                if (ofGetKeyPressed(OF_KEY_SHIFT)) {
+                    //TODO
+                }else{
+                    cursorPos++;
+                    if (cursorPos > line[cursorLine].length()) {
+                        cursorPos = (int)line[cursorLine].length();
+                    }
+                }
+                break;
+                // 変換前のひらがな入力中は、その中で移動
+            case KanaNyuryoku:
+                cursorPosBeforeHenkan++;
+                if (cursorPosBeforeHenkan > beforeHenkan.length()) {
+                    cursorPosBeforeHenkan = (int)beforeHenkan.length();
+                }
+                break;
+            }
+            break;
+            
+            // 決定キーで実行、キーをクリアする
+        case OF_KEY_RETURN:
+            switch (state) {
+                // 変換する文字列がなければ、改行(新しい行)を追加
+            case Eisu:
+            case Kana:
+                newLine();
+                break;
+                
+                // 何らかの変換前文字列があれば
+                // スタック上の文字列を確定して追加
+            case KanaNyuryoku:
+            case KanaHenkan:
+                kakutei();
+                state = Kana;
+                break;
+            }
+                        
+            // 通常の文字キーの場合
+        default:
+            
+            // 文字の入力
+            if (32 <= key.key && key.key <= 126) {
+                // 変換候補を選んでいるときに文字を入力すると
+                // その時点で確定する
+                if (state == KanaHenkan) {
+                    kakutei();
+                    state = KanaNyuryoku;
+                }
+                
+                switch (state) {
+                    // 直接入力
+                case Eisu:
+                    addKey(line[cursorLine], key.key, cursorPos);
+                    break;
+                    
+                    // かな系のstate
+                case Kana:
+                    state = KanaNyuryoku;
+                case KanaNyuryoku:
+                    addKey(beforeHenkan, key.key, cursorPosBeforeHenkan);
+                    toHiragana(beforeHenkan, cursorPosBeforeHenkan);
+                    break;
+                    
+                    // 変換中だとしたら最初に解除されているので、ここは通らない
+                default:
+                    break;
+                }
+                
+                break;
+            }
+        }
+    }
 
 	// 直前に押したキーを保存
 	pastPressedKey = key.key;
@@ -710,6 +767,9 @@ void ofxGoogleIME::lineChange(int n) {
 }
 
 void ofxGoogleIME::addKey(u32string &target, const char &c, int &p) {
+    // もし範囲選択中なら、それを削除
+    deleteSelected();
+    
     // カーソル位置が範囲外なら修正
     if (p < 0) p = 0;
     if (p > target.length()) p = (int)target.length();

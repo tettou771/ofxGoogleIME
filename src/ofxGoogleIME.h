@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 // 文字コードの変換に必要
 #include <codecvt>
@@ -47,8 +47,53 @@ protected:
 	// 入力されたキーのヒストリー
 	char pastPressedKey;
 	u32string beforeHenkan; // ひらがな化したあとの部分
+    
+    // テキスト入力エリア
 	vector<u32string> line; // 変換後のテキスト。行ごとにvectorになっている
+    // 選択範囲
+    typedef tuple<int, int> TextSelectPos;
+    TextSelectPos selectBegin, selectEnd;
+    void selectCancel() {
+        selectBegin = selectEnd = TextSelectPos(0, 0);
+    }
+    bool isSelected() {
+        return selectBegin != selectEnd;
+    }
+    void selectAll() {
+        selectBegin = TextSelectPos(0, 0);
+        selectEnd = TextSelectPos(line.size() - 1, line.back().length());
+    }
+    void deleteSelected() {
+        if (!isSelected()) return;
+        
+        int bl, bn, el, en;
+        tie(bl, bn) = selectBegin;
+        tie(el,en) = selectEnd;
+        
+        // 前後関係が逆の時は、入れ替える
+        if (bl > el || (bl == el && bn > en)) {
+            tie(el, en) = selectBegin;
+            tie(bl, bn) = selectEnd;
+        }
 
+        int blen = (int)line[bl].length();
+        if (blen < bn) bn = blen;
+        
+        int elen = (int)line[el].length();
+        if (elen < en) en = elen;
+
+        // 同じ行内で選択している時は、その行の文字列を削除
+        // 行を跨ぐ場合は最初と最後の行の一部を削除して最初の行にマージ
+        line[bl] = line[bl].substr(0, bn) + line[el].substr(el, elen - en);
+        
+        // 間の行を削除
+        int delNum = el - bl;
+        for (int i=0; i<delNum; ++i) {
+            line.erase(line.begin() + bl + 1);
+        }
+    }
+    
+    
 	// アルファベットの文字列をお尻だけひらがなに変換して追加するメソッド
     void toHiragana(u32string &str, int checkPos);
 
