@@ -183,6 +183,12 @@ private:
                                      CFNotificationName name,
                                      const void *object,
                                      CFDictionaryRef userInfo);
+
+    // IME候補ウィンドウを抑制するためのView管理
+    void setupIMEInterceptView();
+    void removeIMEInterceptView();
+    void *imeInterceptView;  // ofxGoogleIMEView*
+    void *originalContentView;  // NSView*
 #endif
 
     // 変換候補を選ぶときの動き (0-1)
