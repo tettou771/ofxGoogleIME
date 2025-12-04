@@ -17,7 +17,6 @@ void ofApp::setup(){
     
     ime.setFont(fontName, 20);
     ime.enable();
-    ime.setPos(20, 60);
 
     ofSetBackgroundColor(200);
 }
@@ -30,6 +29,9 @@ void ofApp::update(){
 //--------------------------------------------------------------
 void ofApp::draw(){
     ofSetColor(50);
+
+    // IMEの描画
+    ime.draw(20, 60);
 
     int y = 100;
     for (auto &t : texts) {

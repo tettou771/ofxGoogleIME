@@ -20,7 +20,6 @@ void ofxGoogleIME::enable() {
     enabled = true;
     ofAddListener(ofEvents().keyPressed, this, &ofxGoogleIME::keyPressed);
     ofAddListener(ofEvents().mousePressed, this, &ofxGoogleIME::mousePressed);
-    ofAddListener(ofEvents().draw, this, &ofxGoogleIME::draw, OF_EVENT_ORDER_AFTER_APP);
 
 #ifdef __APPLE__
     startIMEObserver();
@@ -34,7 +33,6 @@ void ofxGoogleIME::disable() {
 	enabled = false;
     ofRemoveListener(ofEvents().keyPressed, this, &ofxGoogleIME::keyPressed);
     ofRemoveListener(ofEvents().mousePressed, this, &ofxGoogleIME::mousePressed);
-    ofRemoveListener(ofEvents().draw, this, &ofxGoogleIME::draw, OF_EVENT_ORDER_AFTER_APP);
 
 #ifdef __APPLE__
     stopIMEObserver();
@@ -67,10 +65,6 @@ void ofxGoogleIME::clear() {
     default:
         break;
     }
-}
-
-void ofxGoogleIME::draw(ofEventArgs &args) {
-    draw(pos);
 }
 
 void ofxGoogleIME::keyPressed(ofKeyEventArgs & key) {
@@ -345,26 +339,26 @@ void ofxGoogleIME::keyPressed(ofKeyEventArgs & key) {
 }
 
 void ofxGoogleIME::mousePressed(ofMouseEventArgs &mouse) {
-    auto bbox = font.getStringBoundingBox(getString(), pos.x, pos.y);
-    
+    auto bbox = font.getStringBoundingBox(getString(), lastDrawPos.x, lastDrawPos.y);
+
     // bbox内をクリックしたかどうか
     if (!bbox.inside(mouse.x, mouse.y)) return;
-    
+
     // 変換中なら確定してしまう
     kakutei();
-    
+
     ofVec2f rel = ofVec2f(mouse.x, mouse.y) - bbox.position;
-    
+
     int lineNumber = ofMap(rel.y, 0, bbox.height, 0, line.size(), true);
-    
+
     // 微妙な下端の位置をクリックして範囲外なら範囲内に収める
     lineNumber = MIN(lineNumber, (int)line.size() - 1);
-    
+
     // クリックしている文字を調べる
-    auto lineBbox = font.getStringBoundingBox(UTF32toUTF8(line[lineNumber]), pos.x, pos.y + font.getLineHeight() * lineNumber);
+    auto lineBbox = font.getStringBoundingBox(UTF32toUTF8(line[lineNumber]), lastDrawPos.x, lastDrawPos.y + font.getLineHeight() * lineNumber);
     int posNumber = ofMap(mouse.x, 0, lineBbox.width, 0, line[lineNumber].size());
     MIN(posNumber, line[cursorLine].size());
-    
+
     // 選択する
     cursorLine = lineNumber;
     cursorPos = posNumber;
@@ -422,14 +416,6 @@ void ofxGoogleIME::setFont(string path, float fontSize) {
 	font.load(settings);
 }
 
-void ofxGoogleIME::setPos(ofVec2f p) {
-    pos = p;
-}
-
-void ofxGoogleIME::setPos(float x, float y) {
-    setPos(ofVec2f(x, y));
-}
-
 void ofxGoogleIME::draw(ofPoint pos) {
 	draw(pos.x, pos.y);
 }
@@ -440,6 +426,9 @@ void ofxGoogleIME::draw(float x, float y) {
 		ofLogError("ofxGoogleIME") << "font is not loaded." << endl;
 		return;
 	}
+
+    // マウスクリック判定用に描画位置を記録
+    lastDrawPos = ofVec2f(x, y);
 
     // 変換するときのエフェクト
     movingY *= 0.7;
@@ -539,11 +528,7 @@ void ofxGoogleIME::draw(float x, float y) {
                 // 確定前の部分
                 for (int i = 0; i < candidate.size(); ++i) {
                     auto current = UTF32toUTF8(candidate[i][candidateSelected[i]]);
-                    
-                    // 変換中はアンダーバーを引く
-                    ofSetLineWidth(2);
-                    ofDrawLine(0, fontSize * 0.2, candidateW[i], fontSize * 0.2);
-                    
+                                        
                     // フォーカスが合っている場合はハイライトして、候補も書く
                     if (i == candidateFocus) {
                         // 1行の高さ
@@ -551,11 +536,13 @@ void ofxGoogleIME::draw(float x, float y) {
                         
                         ofPushStyle();
                         
+						/*
                         // 候補全体に座布団を敷く
                         ofFill();
                         ofSetColor(90, 100);
-                        ofDrawRectangle(0, lh * (0.2-candidateSelected[i] - 1), candidateW[i], lh * candidate[i].size());
+                        ofDrawRectangle(0, lh * (0.2-candidateSelected[i] - 1 + movingY), candidateW[i], lh * candidate[i].size());
                         ofPopStyle();
+						 */
                         
                         // 上下に他の候補も含めて並べる
                         for (int j = 0; j < candidate[i].size(); ++j) {
@@ -563,10 +550,18 @@ void ofxGoogleIME::draw(float x, float y) {
                             auto str = UTF32toUTF8(candidate[i][j]);
                             font.drawString(str, 0, offsetY);
                         }
-                    }
+
+						// 変換中はアンダーバーを引く フォーカスを示すために太く
+						ofSetLineWidth(2);
+						ofDrawLine(0, fontSize * 0.2, candidateW[i], fontSize * 0.2);
+					}
                     else {
                         // 選択中でなければ一つだけ描画
                         font.drawString(current, 0, 0);
+						
+						// 変換中はアンダーバーを引く
+						ofSetLineWidth(1);
+						ofDrawLine(0, fontSize * 0.2, candidateW[i], fontSize * 0.2);
                     }
                     
                     ofTranslate(candidateW[i] + margin, 0);

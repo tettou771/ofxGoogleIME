@@ -21,9 +21,12 @@ public:
 	void disable();
 	void clear();
 
-    void draw(ofEventArgs &args);
 	void keyPressed(ofKeyEventArgs &key);
     void mousePressed(ofMouseEventArgs &mouse);
+
+    // 描画（ユーザーが任意の座標で呼び出す）
+    void draw(float x, float y);
+    void draw(ofPoint pos);
 
 	bool isEnabled() { return enabled; }
 
@@ -35,15 +38,10 @@ public:
 	string getBeforeHenkan();
     string getBeforeHenkanSubstr(int begin, int end);
 	void setFont(string path, float fontSize);
-    void setPos(ofVec2f p);
-    void setPos(float x, float y);
-    
+
 protected:
-	void draw(ofPoint pos);
-	void draw(float x, float y);
-    
-    ofVec2f pos;
 	bool enabled = false;
+    ofVec2f lastDrawPos;  // 最後にdrawした位置（マウスクリック判定用）
 
 	// 入力されたキーのヒストリー
 	char pastPressedKey;
