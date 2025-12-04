@@ -21,8 +21,8 @@ void ofxGoogleIME::enable() {
     ofAddListener(ofEvents().keyPressed, this, &ofxGoogleIME::keyPressed);
     ofAddListener(ofEvents().mousePressed, this, &ofxGoogleIME::mousePressed);
 
-#ifdef __APPLE__
     startIMEObserver();
+#ifdef __APPLE__
     setupIMEInterceptView();
 #endif
 }
@@ -34,8 +34,8 @@ void ofxGoogleIME::disable() {
     ofRemoveListener(ofEvents().keyPressed, this, &ofxGoogleIME::keyPressed);
     ofRemoveListener(ofEvents().mousePressed, this, &ofxGoogleIME::mousePressed);
 
-#ifdef __APPLE__
     stopIMEObserver();
+#ifdef __APPLE__
     removeIMEInterceptView();
 #endif
 }
@@ -78,12 +78,6 @@ void ofxGoogleIME::keyPressed(ofKeyEventArgs & key) {
     // Ctrl
     if (ofGetKeyPressed(ctrl)){
         switch (key.key) {
-#ifndef __APPLE__
-        // Ctrl + Space で Eisu, Kana トグル（macOSではOS側IMEに連動するため無効）
-        case ' ':
-            toggleMode();
-            break;
-#endif
         case 'c':
             // TODO
             // copy text
@@ -102,20 +96,6 @@ void ofxGoogleIME::keyPressed(ofKeyEventArgs & key) {
         default:break;
         }
     }
-
-#ifndef __APPLE__
-    // Alt（macOSではOS側IMEに連動するため無効）
-    else if (ofGetKeyPressed(OF_KEY_ALT)) {
-        switch (key.key) {
-        case '`':
-        case '~':
-            // Alt + '`' または '~' で Eisu, Kana トグル
-            toggleMode();
-            break;
-        default:break;
-        }
-    }
-#endif
     
     // Ctrl, Alt を押してない場合
     else {
@@ -186,13 +166,6 @@ void ofxGoogleIME::keyPressed(ofKeyEventArgs & key) {
             }
             
             break;
-
-#ifndef __APPLE__
-            // 全角/半角キー（macOSではOS側IMEに連動するため無効）
-        case 244: // 全角/半角
-            toggleMode();
-            break;
-#endif
 
             // 上下カーソルキー
         case OF_KEY_UP:
@@ -479,6 +452,7 @@ void ofxGoogleIME::draw(float x, float y) {
             
             // 入力カーソルを描画する関数
             auto drawCursor = [=](float x, float y) {
+				if (!enabled) return; // 入力中でなければ表示しない
                 if (fmod(ofGetElapsedTimef() - cursorBlinkOffsetTime, 0.8) < 0.4) {
                     ofSetLineWidth(2);
                     ofDrawLine(x + 1, y, x + 1, y - fontSize * 1.2);

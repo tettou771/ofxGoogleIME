@@ -2,8 +2,10 @@
 
 #include <string>
 
-// IME無効化に必要
+// IME連動に必要
 #ifdef WIN32
+#include <Windows.h>
+#include <Imm.h>
 #pragma comment(lib,"imm32.lib")
 #elif defined __APPLE__
 #include <Carbon/Carbon.h>
@@ -176,11 +178,12 @@ private:
     // モード変更
     void toggleMode();
 
-#ifdef __APPLE__
     // OS側のIME状態を監視して同期
     void startIMEObserver();
     void stopIMEObserver();
     void syncWithSystemIME();
+
+#ifdef __APPLE__
     static void onInputSourceChanged(CFNotificationCenterRef center,
                                      void *observer,
                                      CFNotificationName name,
@@ -192,6 +195,12 @@ private:
     void removeIMEInterceptView();
     void *imeInterceptView;  // ofxGoogleIMEView*
     void *originalContentView;  // NSView*
+#endif
+
+#ifdef WIN32
+    // WindowsでのIME状態監視用
+    void checkIMEState(ofEventArgs &args);
+    DWORD lastIMEConversionMode = 0;
 #endif
 
     // 変換候補を選ぶときの動き (0-1)

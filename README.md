@@ -14,8 +14,7 @@ macOSではOS側のIME状態と自動的に同期します。
 exampleを実行すると、挙動が確認できます。
 
 ## 入力切り替え
-- macOS: OS側のIME切り替えに完全連動
-- Windows: Alt + ` / 全角半角キー / Ctrl + Space
+OS側のIME切り替えに完全連動します（macOS / Windows両対応）。
 
 ofApp.h
 
