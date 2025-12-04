@@ -28,12 +28,13 @@ void ofApp::update(){
 
 //--------------------------------------------------------------
 void ofApp::draw(){
-    ofSetColor(50);
-
     // IMEの描画
+	ofSetColor(50);
     ime.draw(20, 60);
 
-    int y = 100;
+	// 入力済みを Ctrl+Return で入力済みエリアに移動できる
+	ofSetColor(100);
+    int y = 400;
     for (auto &t : texts) {
         font.drawString(t, 20, y);
         y += 5 + font.stringHeight(t);
@@ -49,7 +50,6 @@ void ofApp::keyPressed(int key){
         // Ctrl
         if (ofGetKeyPressed(OF_KEY_CONTROL)) {
             addText(ime.getString());
-            ime.disable();
             ime.clear();
         }
         break;
@@ -57,11 +57,6 @@ void ofApp::keyPressed(int key){
 }
 
 void ofApp::keyReleased(int key){
-    switch (key) {
-    case OF_KEY_RETURN:
-        if (!ime.isEnabled()) ime.enable();
-        break;
-    }
 }
 
 void ofApp::mousePressed(int x, int y, int button){
