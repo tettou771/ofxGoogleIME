@@ -2,21 +2,20 @@
 
 ![Thumbnail image](thumbnail.png)
 
-これは作りかけのプロジェクトです。
+GoogleのIME WebAPIを利用して日本語入力するopenFrameworksアドオンです。
 
-NotoSansJPをインストールしたPCで、googleのIMEをWebAPI経由で利用して文字入力するアドオンです。
+HTTPリクエストを使って変換候補を取得する実装ですが、非同期処理により描画をブロックしません。
 
-HTTPリクエストを使って変換候補を毎回聞くというかなり無理やりな実装ですが、意外に遅延が少ないので一応使えそうです。
-
-作りかけなので、使い方などはコロコロ変わると思います。
-
-OSのIMEを切らないと、キーバインドがバッティングする可能性はあります。
+macOSではOS側のIME状態と自動的に同期します。
 
 # Usage
 
-入力方法の切り替えは、Alt + ` （バッククォート）です。
 インターネット接続が必要です。
 exampleを実行すると、挙動が確認できます。
+
+## 入力切り替え
+- macOS: OS側のIME切り替えに完全連動
+- Windows: Alt + ` / 全角半角キー / Ctrl + Space
 
 ofApp.h
 
@@ -28,14 +27,16 @@ ofApp.cpp
 
 ```cpp
 // setup
-float fontSize = 20;
-ime.setup("フォント名", fontSize);
-```
+ime.setFont("フォント名", 20);
+ime.enable();
 
+// draw
+ime.draw(20, 60);  // 任意の座標で描画
+```
 
 # Tested system
 
-Mac + of0.11.2
+Mac + of0.12.1
 
 # Author
 

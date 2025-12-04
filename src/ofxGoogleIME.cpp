@@ -77,11 +77,13 @@ void ofxGoogleIME::keyPressed(ofKeyEventArgs & key) {
     
     // Ctrl
     if (ofGetKeyPressed(ctrl)){
-        // Ctrl + Space で Eisu, Kana トグル
         switch (key.key) {
+#ifndef __APPLE__
+        // Ctrl + Space で Eisu, Kana トグル（macOSではOS側IMEに連動するため無効）
         case ' ':
             toggleMode();
             break;
+#endif
         case 'c':
             // TODO
             // copy text
@@ -96,23 +98,24 @@ void ofxGoogleIME::keyPressed(ofKeyEventArgs & key) {
                 }
             }
             break;
-            
+
         default:break;
         }
     }
-    
-    // Alt
+
+#ifndef __APPLE__
+    // Alt（macOSではOS側IMEに連動するため無効）
     else if (ofGetKeyPressed(OF_KEY_ALT)) {
         switch (key.key) {
         case '`':
         case '~':
             // Alt + '`' または '~' で Eisu, Kana トグル
-            // ALTを押していなければ、通過して通常の文字キーとして処理される
             toggleMode();
             break;
         default:break;
         }
     }
+#endif
     
     // Ctrl, Alt を押してない場合
     else {
@@ -184,10 +187,12 @@ void ofxGoogleIME::keyPressed(ofKeyEventArgs & key) {
             
             break;
 
-            // 全角/半角キー
+#ifndef __APPLE__
+            // 全角/半角キー（macOSではOS側IMEに連動するため無効）
         case 244: // 全角/半角
             toggleMode();
             break;
+#endif
 
             // 上下カーソルキー
         case OF_KEY_UP:
