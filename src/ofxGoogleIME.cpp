@@ -637,7 +637,39 @@ void ofxGoogleIME::toHiragana(u32string &str, int checkPos) {
 }
 
 void ofxGoogleIME::henkan() {
-	state = KanaHenkan;
+    // 既にリクエスト中なら一旦リスナーを解除
+    if (state == KanaHenkanWaiting) {
+        ofRemoveListener(ofURLResponseEvent(), this, &ofxGoogleIME::onHenkanResponse);
+    }
+
+	state = KanaHenkanWaiting;
+
+	// もし、beforeHenkan の最後に n が残っていたら それを ん にする
+	if (beforeHenkan.length() > 0 && beforeHenkan[beforeHenkan.length() - 1] == U'n') {
+        beforeHenkan[beforeHenkan.length() - 1] = U'ん';
+	}
+
+	string encoded = percentEnc(beforeHenkan);
+	ofLogVerbose("ofxGoogleIME") << "percentEnc: " << encoded << endl;
+
+    // 非同期でリクエストを送信
+    henkanRequestId++;
+    ofAddListener(ofURLResponseEvent(), this, &ofxGoogleIME::onHenkanResponse);
+    ofLoadURLAsync("http://www.google.com/transliterate?langpair=ja-Hira|ja&text=" + encoded, "henkan_" + to_string(henkanRequestId));
+}
+
+void ofxGoogleIME::onHenkanResponse(ofHttpResponse &response) {
+    // 自分のリクエストでなければ無視（henkan_で始まるもののみ処理）
+    string expectedName = "henkan_" + to_string(henkanRequestId);
+    if (response.request.name != expectedName) return;
+
+    // リスナーを解除
+    ofRemoveListener(ofURLResponseEvent(), this, &ofxGoogleIME::onHenkanResponse);
+
+    // 変換待ち状態でなければ無視（キャンセルされた場合など）
+    if (state != KanaHenkanWaiting) return;
+
+    state = KanaHenkan;
 
 	// tryつきlog
 	auto tryCout = [](ofJson a, int n) {
@@ -655,16 +687,6 @@ void ofxGoogleIME::henkan() {
 		}
 	};
 
-	// もし、beforeHenkan の最後に n が残っていたら それを ん にする
-	if (beforeHenkan.length() > 0 && beforeHenkan[beforeHenkan.length() - 1] == U'n') {
-        beforeHenkan[beforeHenkan.length() - 1] = U'ん';
-	}
-
-	string encoded = percentEnc(beforeHenkan);
-	ofLogVerbose("ofxGoogleIME") << "percentEnc: " << encoded << endl;
-    
-    auto response =  ofLoadURL("http://www.google.com/transliterate?langpair=ja-Hira|ja&text=" + encoded);
-    
     // jsonとしてパースできるかどうか試す
     bool result = false;
     try {
@@ -673,7 +695,7 @@ void ofxGoogleIME::henkan() {
     }
     catch (std::exception& e) {
         // エラーをキャッチして、メッセージを出力する
-        std::cerr << "JSON parse error: " << e.what() << std::endl;
+        cerr << "JSON parse error: " << e.what() << endl;
     }
 
 	if (result) {
@@ -682,7 +704,7 @@ void ofxGoogleIME::henkan() {
 			tryCout(L1, 0);
 			for (ofJson L2 : L1) {
 				bool L2Exist = tryCout(L2, 1);
-                
+
 				// tryCoutが成功したら、変換前のかなが入っているので
 				// それを集める
 				if (L2Exist) {
@@ -708,7 +730,7 @@ void ofxGoogleIME::henkan() {
 					}
 				}
 			}
-            
+
             // candidateSelectedを、カーソルがあっている位置以降をゼロにする
             for (int cs = candidateFocus; cs < candidate.size(); ++cs) {
                 candidateSelected[cs] = 0;
@@ -717,6 +739,9 @@ void ofxGoogleIME::henkan() {
 	}
 	else {
 		ofLogVerbose("ofxGoogleIME") << "GJI API error." << endl;
+        // エラー時は入力状態に戻す
+        state = KanaNyuryoku;
+        return;
 	}
 
 	beforeHenkan = U"";

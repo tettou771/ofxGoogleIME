@@ -163,9 +163,14 @@ private:
 		Eisu,
 		Kana,
 		KanaNyuryoku,
+		KanaHenkanWaiting,  // 変換リクエスト中（サーバー応答待ち）
 		KanaHenkan
 	};
 	State state;
+
+    // 非同期変換のコールバック
+    void onHenkanResponse(ofHttpResponse &response);
+    int henkanRequestId = 0;  // リクエストの識別用
 
 	// 描画用のフォント
 	ofTrueTypeFont font;
