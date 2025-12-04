@@ -6,6 +6,7 @@
 #ifdef WIN32
 #pragma comment(lib,"imm32.lib")
 #elif defined __APPLE__
+#include <Carbon/Carbon.h>
 #endif
 
 #include "ofMain.h"
@@ -171,7 +172,10 @@ private:
     
     // モード変更
     void toggleMode();
-    
+
+    // OS側のIMEを無効化して直接入力に切り替え
+    void disableSystemIME();
+
     // 変換候補を選ぶときの動き (0-1)
     float movingY;
     
