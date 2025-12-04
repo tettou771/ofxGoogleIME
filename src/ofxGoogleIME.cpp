@@ -13,17 +13,25 @@ ofxGoogleIME::~ofxGoogleIME() {
 void ofxGoogleIME::enable() {
     if (enabled) return;
 
-    // OS側IMEを無効化（直接入力に切り替え）
-    disableSystemIME();
-
     enabled = true;
     ofAddListener(ofEvents().keyPressed, this, &ofxGoogleIME::keyPressed);
     ofAddListener(ofEvents().mousePressed, this, &ofxGoogleIME::mousePressed);
     ofAddListener(ofEvents().draw, this, &ofxGoogleIME::draw, OF_EVENT_ORDER_AFTER_APP);
+
+#ifdef __APPLE__
+    // OS側IME状態を監視開始
+    startIMEObserver();
+    // 現在の状態に同期
+    syncWithSystemIME();
+#endif
 }
 
 void ofxGoogleIME::disable() {
     if (!enabled) return;
+
+#ifdef __APPLE__
+    stopIMEObserver();
+#endif
 
 	enabled = false;
     ofRemoveListener(ofEvents().keyPressed, this, &ofxGoogleIME::keyPressed);
@@ -31,34 +39,74 @@ void ofxGoogleIME::disable() {
     ofRemoveListener(ofEvents().draw, this, &ofxGoogleIME::draw, OF_EVENT_ORDER_AFTER_APP);
 }
 
-void ofxGoogleIME::disableSystemIME() {
 #ifdef __APPLE__
-    // macOS: 英数入力（ASCII capable）に切り替え
-    CFArrayRef sourceList = TISCreateInputSourceList(NULL, false);
-    if (sourceList) {
-        CFIndex count = CFArrayGetCount(sourceList);
-        for (CFIndex i = 0; i < count; i++) {
-            TISInputSourceRef source = (TISInputSourceRef)CFArrayGetValueAtIndex(sourceList, i);
-            CFStringRef sourceID = (CFStringRef)TISGetInputSourceProperty(source, kTISPropertyInputSourceID);
-            // "ABC"または"US"キーボードを探す
-            if (sourceID) {
-                if (CFStringFind(sourceID, CFSTR("ABC"), 0).location != kCFNotFound ||
-                    CFStringFind(sourceID, CFSTR("com.apple.keylayout.US"), 0).location != kCFNotFound) {
-                    TISSelectInputSource(source);
-                    break;
+void ofxGoogleIME::startIMEObserver() {
+    CFNotificationCenterAddObserver(
+        CFNotificationCenterGetDistributedCenter(),
+        this,
+        onInputSourceChanged,
+        kTISNotifySelectedKeyboardInputSourceChanged,
+        NULL,
+        CFNotificationSuspensionBehaviorDeliverImmediately
+    );
+}
+
+void ofxGoogleIME::stopIMEObserver() {
+    CFNotificationCenterRemoveObserver(
+        CFNotificationCenterGetDistributedCenter(),
+        this,
+        kTISNotifySelectedKeyboardInputSourceChanged,
+        NULL
+    );
+}
+
+void ofxGoogleIME::onInputSourceChanged(CFNotificationCenterRef center,
+                                        void *observer,
+                                        CFNotificationName name,
+                                        const void *object,
+                                        CFDictionaryRef userInfo) {
+    // observerはofxGoogleIMEインスタンスへのポインタ
+    ofxGoogleIME *ime = static_cast<ofxGoogleIME*>(observer);
+    if (ime) {
+        ime->syncWithSystemIME();
+    }
+}
+
+void ofxGoogleIME::syncWithSystemIME() {
+    TISInputSourceRef source = TISCopyCurrentKeyboardInputSource();
+    if (source) {
+        CFStringRef sourceID = (CFStringRef)TISGetInputSourceProperty(source, kTISPropertyInputSourceID);
+        if (sourceID) {
+            // 日本語入力ソースかどうかを判定
+            // "Japanese"または"Hiragana"が含まれていれば日本語モード
+            bool isJapanese = (CFStringFind(sourceID, CFSTR("Japanese"), 0).location != kCFNotFound) ||
+                              (CFStringFind(sourceID, CFSTR("Hiragana"), 0).location != kCFNotFound);
+
+            if (isJapanese) {
+                // 日本語モードに切り替え（ただし変換中は維持）
+                if (state == Eisu) {
+                    state = Kana;
+                }
+            } else {
+                // 英数モードに切り替え
+                if (state == Kana || state == KanaNyuryoku) {
+                    // 入力中の文字があれば確定
+                    if (beforeHenkan.length() > 0) {
+                        addStr(line[cursorLine], beforeHenkan, cursorPos);
+                        beforeHenkan = U"";
+                        cursorPosBeforeHenkan = 0;
+                    }
+                    state = Eisu;
+                } else if (state == KanaHenkan) {
+                    kakutei();
+                    state = Eisu;
                 }
             }
         }
-        CFRelease(sourceList);
+        CFRelease(source);
     }
-#elif defined(WIN32)
-    // Windows: IMEを無効化
-    HWND hwnd = GetActiveWindow();
-    if (hwnd) {
-        ImmAssociateContextEx(hwnd, NULL, 0);
-    }
-#endif
 }
+#endif
 
 void ofxGoogleIME::clear() {
 	beforeHenkan = U"";
@@ -212,29 +260,6 @@ void ofxGoogleIME::keyPressed(ofKeyEventArgs & key) {
         case 244: // 全角/半角
             toggleMode();
             break;
-
-#ifdef __APPLE__
-            // Mac: 右Cmdで日本語モード、左Cmdで英数モード
-        case OF_KEY_RIGHT_COMMAND:
-            if (state == Eisu) {
-                state = Kana;
-            }
-            break;
-        case OF_KEY_LEFT_COMMAND:
-            if (state == Kana || state == KanaNyuryoku) {
-                // 入力中の文字があれば確定
-                if (beforeHenkan.length() > 0) {
-                    addStr(line[cursorLine], beforeHenkan, cursorPos);
-                    beforeHenkan = U"";
-                    cursorPosBeforeHenkan = 0;
-                }
-                state = Eisu;
-            } else if (state == KanaHenkan) {
-                kakutei();
-                state = Eisu;
-            }
-            break;
-#endif
 
             // 上下カーソルキー
         case OF_KEY_UP:

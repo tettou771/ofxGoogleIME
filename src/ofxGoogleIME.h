@@ -173,8 +173,17 @@ private:
     // モード変更
     void toggleMode();
 
-    // OS側のIMEを無効化して直接入力に切り替え
-    void disableSystemIME();
+#ifdef __APPLE__
+    // OS側のIME状態を監視して同期
+    void startIMEObserver();
+    void stopIMEObserver();
+    void syncWithSystemIME();
+    static void onInputSourceChanged(CFNotificationCenterRef center,
+                                     void *observer,
+                                     CFNotificationName name,
+                                     const void *object,
+                                     CFDictionaryRef userInfo);
+#endif
 
     // 変換候補を選ぶときの動き (0-1)
     float movingY;
