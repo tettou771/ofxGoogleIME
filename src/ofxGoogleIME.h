@@ -1,7 +1,6 @@
 #pragma once
 
-// 文字コードの変換に必要
-#include <codecvt>
+#include <string>
 
 // IME無効化に必要
 #ifdef WIN32
@@ -10,6 +9,7 @@
 #endif
 
 #include "ofMain.h"
+using namespace std;
 
 class ofxGoogleIME {
 public:
@@ -147,19 +147,6 @@ protected:
 #endif
 
 	string percentEnc(u32string str);
-
-	// リンクエラーの出る変換器
-	//wstring_convert<codecvt_utf8<char32_t>, char32_t> convert8_32;
-	
-#ifdef WIN32
-	// 変換器(UTF8 UTF32)
-	// char32_t を使うとVS2015でリンクエラーとなるので、unit32_t を使っている
-	// ソース Qiita http://qiita.com/benikabocha/items/1fc76b8cea404e9591cf
-	static wstring_convert<codecvt_utf8<uint32_t>, uint32_t> convert8_32;
-#else    
-    // 上記でもエラーが出たので、ChatGPTで聞いた変換器
-    static std::wstring_convert<std::codecvt_utf8<char32_t>, char32_t> convert8_32;
-#endif
 
 public:
 	static string UTF32toUTF8(const u32string &u32str);

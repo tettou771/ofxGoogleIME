@@ -1,11 +1,5 @@
 #include "ofxGoogleIME.h"
 
-#ifdef WIN32
-wstring_convert<codecvt_utf8<uint32_t>, uint32_t> ofxGoogleIME::convert8_32;
-#else
-std::wstring_convert<std::codecvt_utf8<char32_t>, char32_t> ofxGoogleIME::convert8_32;
-#endif
-
 ofxGoogleIME::ofxGoogleIME() {
 	ofSetEscapeQuitsApp(false);
 	makeDictionary();
@@ -976,21 +970,62 @@ string ofxGoogleIME::percentEnc(u32string u32str) {
 	return encoded;
 }
 
-string ofxGoogleIME::UTF32toUTF8(const u32string & u32str) {
-#ifdef WIN32
-    return convert8_32.to_bytes(reinterpret_cast<const uint32_t*>(u32str.c_str()));
-#else
-	return convert8_32.to_bytes(reinterpret_cast<const char32_t*>(u32str.c_str()));
-#endif
+// UTF-32からUTF-8への変換（自前実装）
+string ofxGoogleIME::UTF32toUTF8(const u32string &u32str) {
+    string result;
+    for (char32_t c : u32str) {
+        if (c < 0x80) {
+            result += static_cast<char>(c);
+        } else if (c < 0x800) {
+            result += static_cast<char>(0xC0 | (c >> 6));
+            result += static_cast<char>(0x80 | (c & 0x3F));
+        } else if (c < 0x10000) {
+            result += static_cast<char>(0xE0 | (c >> 12));
+            result += static_cast<char>(0x80 | ((c >> 6) & 0x3F));
+            result += static_cast<char>(0x80 | (c & 0x3F));
+        } else {
+            result += static_cast<char>(0xF0 | (c >> 18));
+            result += static_cast<char>(0x80 | ((c >> 12) & 0x3F));
+            result += static_cast<char>(0x80 | ((c >> 6) & 0x3F));
+            result += static_cast<char>(0x80 | (c & 0x3F));
+        }
+    }
+    return result;
 }
 
 string ofxGoogleIME::UTF32toUTF8(const char32_t &u32char) {
-    return convert8_32.to_bytes(u32char);
+    return UTF32toUTF8(u32string(1, u32char));
 }
 
-u32string ofxGoogleIME::UTF8toUTF32(const string & str) {
-	auto A = convert8_32.from_bytes(str);
-	return u32string(A.cbegin(), A.cend());
+// UTF-8からUTF-32への変換（自前実装）
+u32string ofxGoogleIME::UTF8toUTF32(const string &str) {
+    u32string result;
+    size_t i = 0;
+    while (i < str.size()) {
+        unsigned char c = str[i];
+        char32_t cp;
+        if ((c & 0x80) == 0) {
+            cp = c;
+            i += 1;
+        } else if ((c & 0xE0) == 0xC0) {
+            cp = (c & 0x1F) << 6;
+            cp |= (str[i+1] & 0x3F);
+            i += 2;
+        } else if ((c & 0xF0) == 0xE0) {
+            cp = (c & 0x0F) << 12;
+            cp |= (str[i+1] & 0x3F) << 6;
+            cp |= (str[i+2] & 0x3F);
+            i += 3;
+        } else {
+            cp = (c & 0x07) << 18;
+            cp |= (str[i+1] & 0x3F) << 12;
+            cp |= (str[i+2] & 0x3F) << 6;
+            cp |= (str[i+3] & 0x3F);
+            i += 4;
+        }
+        result += cp;
+    }
+    return result;
 }
 
 void ofxGoogleIME::makeDictionary() {
